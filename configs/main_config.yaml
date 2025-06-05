@@ -1,0 +1,54 @@
+gcp:
+  project_id: "your-gcp-project-id"
+  location: "your-gcp-region" # e.g., us-central1
+  speech_to_text:
+    recognizer_id: "_" # Optional: Specific recognizer ID, use "_" for default/auto
+    model: "telephony"
+    language_codes: ["en-US"]
+    features:
+      enable_automatic_punctuation: True
+      # enable_word_time_offsets: True
+      # diarization_config:
+      #   enable_speaker_diarization: True
+      #   min_speaker_count: 1
+      #   max_speaker_count: 2
+  vertex_ai:
+    # Define multiple LLM configurations here
+    llm_configurations:
+      gemini_1_5_flash_default:
+        gemini_model_name: "gemini-1.5-flash-001"
+        generation_config:
+          temperature: 0.2
+          top_p: 0.95
+          top_k: 40
+          max_output_tokens: 1024
+      gemini_1_5_flash_creative:
+        gemini_model_name: "gemini-1.5-flash-001"
+        generation_config:
+          temperature: 0.7
+          top_p: 0.9
+          top_k: 50
+          max_output_tokens: 1500
+      gemini_1_0_pro_concise:
+        gemini_model_name: "gemini-1.0-pro-002" # Or other 1.0 pro versions
+        generation_config:
+          temperature: 0.1
+          top_p: 0.95
+          max_output_tokens: 512
+    # Default LLM config name to use if not specified in experiment
+    default_llm_config_name: "gemini_1_5_flash_default"
+  bigquery:
+    dataset_id: "mes_results"
+    summarization_table_id: "call_summarization_evaluations"
+    analysis_table_id: "call_agent_analysis_evaluations"
+  gcs:
+    audio_data_bucket: "your-gcs-bucket-for-audio"
+    audio_dataset_paths:
+      sample_summarization_set: "path/to/your/summarization_audio_files/"
+      sample_analysis_set: "path/to/your/analysis_audio_files/"
+
+retry_settings:
+  attempts: 3
+  wait_initial: 1
+  wait_multiplier: 2
+  wait_max: 10
