@@ -3,8 +3,9 @@ from typing import Dict, Any, List, Optional, Tuple
 from core.gcp_client import get_gemini_model, get_gemini_generation_config
 from vertexai.generative_models import Part, GenerationConfig
 from core.retry_handler import default_retry_decorator
+from .base_metric import BaseMetric
 
-class LLMJudgeEvaluator:
+class LLMJudgeEvaluator(BaseMetric): # Inherit from BaseMetric
     """
     LLM-as-a-Judge evaluator for assessing text quality across multiple dimensions.
     Uses a separate LLM instance to evaluate generated content.
@@ -29,20 +30,17 @@ class LLMJudgeEvaluator:
     
     def _get_summary_evaluation_prompt(self) -> str:
         """Get the prompt template for summary evaluation."""
-        return """You are an expert evaluator of text summaries. Please evaluate the following summary based on the original transcript.
+        return """You are an expert evaluator of text summaries. Please evaluate the following summary.
 
 Rate each dimension on a scale of 1-5, where:
 1 = Very Poor, 2 = Poor, 3 = Average, 4 = Good, 5 = Excellent
 
 EVALUATION DIMENSIONS:
-1. **Accuracy**: How factually correct is the summary compared to the original?
-2. **Completeness**: How well does the summary capture the main points?
+1. **Accuracy**: How factually correct is the summary? (Consider if it introduces information not present or contradicts the source, if a source is available. If no source, evaluate based on general knowledge and internal consistency.)
+2. **Completeness**: How well does the summary capture the main points of the likely input?
 3. **Conciseness**: How well does the summary avoid unnecessary details while maintaining clarity?
 4. **Coherence**: How logically structured and easy to follow is the summary?
 5. **Clarity**: How clear and understandable is the language used?
-
-ORIGINAL TRANSCRIPT:
-{transcript}
 
 SUMMARY TO EVALUATE:
 {summary}
@@ -56,32 +54,29 @@ CLARITY: [score] - [brief explanation]
 OVERALL: [score] - [brief overall assessment]
 """
 
-    def _get_analysis_evaluation_prompt(self) -> str:
-        """Get the prompt template for analysis evaluation."""
-        return """You are an expert evaluator of call analysis reports. Please evaluate the following analysis based on the original transcript.
+    def _get_analysis_evaluation_prompt(self) -> str: # This can be adapted for classification or other tasks
+        """Get the prompt template for a general text analysis/classification evaluation."""
+        return """You are an expert evaluator of text analysis. Please evaluate the following text.
 
 Rate each dimension on a scale of 1-5, where:
 1 = Very Poor, 2 = Poor, 3 = Average, 4 = Good, 5 = Excellent
 
 EVALUATION DIMENSIONS:
-1. **Accuracy**: How factually correct is the analysis compared to the original?
-2. **Insight Quality**: How valuable and actionable are the insights provided?
-3. **Thoroughness**: How comprehensively does the analysis address relevant aspects?
-4. **Structure**: How well-organized and logical is the analysis format?
-5. **Actionability**: How useful are the recommendations/observations for improvement?
+1. **Appropriateness**: How appropriate is the analysis/classification given the likely input?
+2. **Confidence_Justification**: If a confidence score is provided, how well is it justified by the text? (If no confidence score, rate as N/A)
+3. **Clarity_Of_Reasoning**: How clear is the reasoning behind the analysis/classification?
+4. **Potential_Bias**: Does the analysis/classification show any signs of bias?
+5. **Helpfulness**: How helpful is this analysis/classification?
 
-ORIGINAL TRANSCRIPT:
-{transcript}
-
-ANALYSIS TO EVALUATE:
-{analysis}
+TEXT TO EVALUATE:
+{text_input}
 
 Please provide your evaluation in the following format:
-ACCURACY: [score] - [brief explanation]
-INSIGHT_QUALITY: [score] - [brief explanation]
-THOROUGHNESS: [score] - [brief explanation]
-STRUCTURE: [score] - [brief explanation]
-ACTIONABILITY: [score] - [brief explanation]
+APPROPRIATENESS: [score] - [brief explanation]
+CONFIDENCE_JUSTIFICATION: [score] - [brief explanation]
+CLARITY_OF_REASONING: [score] - [brief explanation]
+POTENTIAL_BIAS: [score] - [brief explanation]
+HELPFULNESS: [score] - [brief explanation]
 OVERALL: [score] - [brief overall assessment]
 """
 
@@ -124,10 +119,14 @@ OVERALL: [score] - [brief overall assessment]
             'CONCISENESS': 'conciseness',
             'COHERENCE': 'coherence',
             'CLARITY': 'clarity',
-            'INSIGHT_QUALITY': 'insight_quality',
-            'THOROUGHNESS': 'thoroughness',
-            'STRUCTURE': 'structure',
-            'ACTIONABILITY': 'actionability',
+            # Dimensions for general analysis/classification
+            'APPROPRIATENESS': 'appropriateness',
+            'CONFIDENCE_JUSTIFICATION': 'confidence_justification',
+            'CLARITY_OF_REASONING': 'clarity_of_reasoning',
+            'POTENTIAL_BIAS': 'potential_bias',
+            'HELPFULNESS': 'helpfulness',
+            # Dimension for Q&A Groundedness
+            'GROUNDEDNESS_SUPPORT': 'groundedness_support',
             'OVERALL': 'overall'
         }
         
@@ -146,13 +145,13 @@ OVERALL: [score] - [brief overall assessment]
         
         return scores
 
-    def evaluate_summary(self, transcript: str, summary: str) -> Dict[str, Any]:
+    def evaluate_summary(self, summary: str, transcript: Optional[str] = None) -> Dict[str, Any]:
         """
         Evaluate a summary using LLM-as-a-Judge.
         
         Args:
-            transcript: Original transcript
             summary: Generated summary to evaluate
+            transcript: Optional original transcript (can be None)
             
         Returns:
             Dictionary containing LLM judge scores and metadata
@@ -169,10 +168,11 @@ OVERALL: [score] - [brief overall assessment]
                 "llm_judge_metadata": {"error": "Empty summary provided"}
             }
         
-        prompt = self._get_summary_evaluation_prompt().format(
-            transcript=transcript[:2000],  # Limit length to avoid token limits
-            summary=summary
-        )
+        prompt_format_args = {"summary": summary}
+        if transcript:
+             prompt_format_args["transcript"] = transcript[:2000] # Limit length
+
+        prompt = self._get_summary_evaluation_prompt().format(**prompt_format_args)
         
         try:
             evaluation_text, _, metadata = self._call_judge_llm(prompt)
@@ -187,6 +187,7 @@ OVERALL: [score] - [brief overall assessment]
             return result
             
         except Exception as e:
+            # Ensure all expected keys are present in case of error
             return {
                 "llm_judge_accuracy": 0,
                 "llm_judge_completeness": 0,
@@ -198,33 +199,38 @@ OVERALL: [score] - [brief overall assessment]
                 "llm_judge_metadata": {"error": str(e)}
             }
 
-    def evaluate_analysis(self, transcript: str, analysis: str) -> Dict[str, Any]:
+    def evaluate_classification(self, llm_response: str, input_text: Optional[str] = None) -> Dict[str, Any]:
         """
-        Evaluate an analysis using LLM-as-a-Judge.
+        Evaluate a classification output using LLM-as-a-Judge.
         
         Args:
-            transcript: Original transcript
-            analysis: Generated analysis to evaluate
+            llm_response: The classification output from the LLM.
+            input_text: Optional original input text that was classified (can be None)
             
         Returns:
             Dictionary containing LLM judge scores and metadata
         """
-        if not analysis or not analysis.strip():
+        if not llm_response or not llm_response.strip():
             return {
-                "llm_judge_accuracy": 0,
-                "llm_judge_insight_quality": 0,
-                "llm_judge_thoroughness": 0,
-                "llm_judge_structure": 0,
-                "llm_judge_actionability": 0,
+                "llm_judge_appropriateness": 0,
+                "llm_judge_confidence_justification": 0,
+                "llm_judge_clarity_of_reasoning": 0,
+                "llm_judge_potential_bias": 0,
+                "llm_judge_helpfulness": 0,
                 "llm_judge_overall": 0,
-                "llm_judge_evaluation_text": "Error: Empty analysis",
-                "llm_judge_metadata": {"error": "Empty analysis provided"}
+                "llm_judge_evaluation_text": "Error: Empty LLM response for classification",
+                "llm_judge_metadata": {"error": "Empty LLM response provided"}
             }
-        
-        prompt = self._get_analysis_evaluation_prompt().format(
-            transcript=transcript[:2000],  # Limit length to avoid token limits
-            analysis=analysis
-        )
+
+        prompt_format_args = {"text_input": llm_response} # Evaluate the LLM response itself
+        if input_text:
+            # If original input is provided, it can be added to prompt for context,
+            # but the primary evaluation is on the llm_response (the classification).
+            # For now, the prompt is simpler and focuses on the llm_response.
+            # Modify _get_analysis_evaluation_prompt if deeper context is needed.
+            pass
+
+        prompt = self._get_analysis_evaluation_prompt().format(**prompt_format_args)
         
         try:
             evaluation_text, _, metadata = self._call_judge_llm(prompt)
@@ -240,12 +246,152 @@ OVERALL: [score] - [brief overall assessment]
             
         except Exception as e:
             return {
-                "llm_judge_accuracy": 0,
-                "llm_judge_insight_quality": 0,
-                "llm_judge_thoroughness": 0,
-                "llm_judge_structure": 0,
-                "llm_judge_actionability": 0,
+                "llm_judge_appropriateness": 0,
+                "llm_judge_confidence_justification": 0,
+                "llm_judge_clarity_of_reasoning": 0,
+                "llm_judge_potential_bias": 0,
+                "llm_judge_helpfulness": 0,
                 "llm_judge_overall": 0,
                 "llm_judge_evaluation_text": f"Error: {str(e)}",
                 "llm_judge_metadata": {"error": str(e)}
             }
+
+    def _get_question_generation_prompt(self, summary: str) -> str:
+        """Prompt to generate questions based on the summary."""
+        return f"""Given the following summary, please generate 3-5 factual questions that should be answerable *only* using the information explicitly provided in the summary.
+Focus on key pieces of information, claims, or entities mentioned. Avoid questions requiring external knowledge.
+
+SUMMARY:
+{summary}
+
+QUESTIONS (one per line):
+"""
+
+    def _get_answer_generation_prompt(self, summary: str, questions: List[str]) -> str:
+        """Prompt to answer generated questions based *only* on the summary."""
+        question_block = "\\n".join([f"Q: {q}" for q in questions])
+        return f"""Please answer the following questions based *solely* on the provided summary.
+If the answer is not found in the summary, explicitly state "Information not found in summary". Do not infer or use external knowledge.
+
+SUMMARY:
+{summary}
+
+QUESTIONS:
+{question_block}
+
+ANSWERS (provide an answer for each question, prefixed with 'A: '):
+"""
+
+    def _get_qa_groundedness_evaluation_prompt(self, summary: str, questions_and_answers: str) -> str:
+        """Prompt to evaluate if the answers are well-supported by the summary."""
+        return f"""You are an expert evaluator. Given the original summary, a set of questions, and the answers generated *based only on that summary*, please evaluate how well each answer is supported by the information explicitly present in the summary.
+
+Rate the overall support on a scale of 1-5:
+1 = Very Poor (Answers are not supported by the summary, or fabricate information)
+2 = Poor (Answers are mostly unsupported or significantly misinterpret the summary)
+3 = Average (Some answers are supported, others are not or are partially supported)
+4 = Good (Most answers are well-supported by the summary with minor discrepancies)
+5 = Excellent (All answers are clearly and accurately supported by the summary)
+
+ORIGINAL SUMMARY:
+{summary}
+
+QUESTIONS AND GENERATED ANSWERS:
+{questions_and_answers}
+
+EVALUATION:
+Please provide your evaluation in the following format:
+GROUNDEDNESS_SUPPORT: [score] - [brief overall explanation of why this score was given, highlighting any specific examples of good or poor support]
+"""
+
+    def evaluate_summary_groundedness_qa(self, summary: str) -> Dict[str, Any]:
+        """
+        Evaluate summary groundedness using a Q&A approach with LLM-as-a-Judge.
+        """
+        if not summary or not summary.strip():
+            return {
+                "llm_judge_groundedness_support": 0,
+                "llm_judge_groundedness_questions": "Error: Empty summary",
+                "llm_judge_groundedness_answers": "",
+                "llm_judge_evaluation_text": "Error: Empty summary for Q&A groundedness",
+                "llm_judge_metadata": {"error": "Empty summary provided for Q&A groundedness"}
+            }
+
+        try:
+            # 1. Generate Questions
+            qg_prompt = self._get_question_generation_prompt(summary)
+            generated_questions_text, _, qg_metadata = self._call_judge_llm(qg_prompt)
+            questions = [q.strip() for q in generated_questions_text.split('\\n') if q.strip()]
+            if not questions:
+                 return {
+                    "llm_judge_groundedness_support": 0,
+                    "llm_judge_groundedness_questions": "Error: Failed to generate questions from summary",
+                    "llm_judge_groundedness_answers": "",
+                    "llm_judge_evaluation_text": "Error: No questions generated for Q&A groundedness",
+                    "llm_judge_metadata": {"error": "No questions generated", **qg_metadata}
+                }
+
+
+            # 2. Generate Answers based *only* on the summary
+            ag_prompt = self._get_answer_generation_prompt(summary, questions)
+            generated_answers_text, _, ag_metadata = self._call_judge_llm(ag_prompt)
+            
+            # 3. Evaluate Answer Groundedness
+            eval_prompt = self._get_qa_groundedness_evaluation_prompt(summary, f"QUESTIONS:\\n{generated_questions_text}\\n\\nANSWERS:\\n{generated_answers_text}")
+            evaluation_text, _, eval_metadata = self._call_judge_llm(eval_prompt)
+            scores = self._parse_evaluation_scores(evaluation_text)
+
+            # Combine metadata from all steps
+            combined_metadata = {"qg_metadata": qg_metadata, "ag_metadata": ag_metadata, **eval_metadata}
+
+            result = {
+                "llm_judge_groundedness_questions": generated_questions_text,
+                "llm_judge_groundedness_answers": generated_answers_text,
+                "llm_judge_evaluation_text": evaluation_text,
+                "llm_judge_metadata": combined_metadata,
+                **scores # This should include llm_judge_groundedness_support
+            }
+            # Ensure the main score key is present, even if parsing failed to find it specifically
+            if "llm_judge_groundedness_support" not in result:
+                result["llm_judge_groundedness_support"] = 0
+
+
+            return result
+
+        except Exception as e:
+            return {
+                "llm_judge_groundedness_support": 0,
+                "llm_judge_groundedness_questions": f"Error: {str(e)}",
+                "llm_judge_groundedness_answers": "",
+                "llm_judge_evaluation_text": f"Error during Q&A groundedness: {str(e)}",
+                "llm_judge_metadata": {"error": str(e)}
+            }
+
+    # Implementing the abstract method from BaseMetric
+    def calculate(self, llm_response: str, task_type: str, **kwargs) -> Dict[str, Any]:
+        """
+        Generic calculate method to route to specific evaluation types.
+        Args:
+            llm_response: The response from the LLM.
+            task_type: 'summarization' or 'classification'.
+            **kwargs: Additional arguments (e.g., 'transcript' for summarization, 
+                                            'input_text' for classification).
+        Returns:
+            A dictionary of calculated LLM-as-a-judge metrics.
+        """
+        if task_type == "summarization":
+            transcript = kwargs.get("transcript")
+            return self.evaluate_summary(summary=llm_response, transcript=transcript)
+        elif task_type == "classification":
+            input_text = kwargs.get("input_text")
+            return self.evaluate_classification(llm_response=llm_response, input_text=input_text)
+        elif task_type == "summary_groundedness":
+            # llm_response here is the summary to be evaluated for groundedness
+            return self.evaluate_summary_groundedness_qa(summary=llm_response)
+        else:
+            return {"error": f"Unsupported task_type for LLMJudgeEvaluator: {task_type}"}
+
+    # Remove or adapt evaluate_analysis if it's not directly a classification/summarization task
+    # For now, let's assume 'evaluate_classification' covers the 'analysis' use case.
+    # def evaluate_analysis(self, transcript: str, analysis: str) -> Dict[str, Any]:
+    #     ... (Keep if a distinct 'analysis' task type is needed, otherwise remove)

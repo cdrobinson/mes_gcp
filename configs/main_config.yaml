@@ -47,6 +47,46 @@ gcp:
       sample_summarization_set: "path/to/your/summarization_audio_files/"
       sample_analysis_set: "path/to/your/analysis_audio_files/"
 
+evaluation:
+  # LLM config to use for LLM-as-a-Judge evaluations (from vertex_ai.llm_configurations)
+  judge_llm_config_name: "gemini_1_5_flash_default"
+
+  # Metrics for summarization tasks
+  # Available: SummaryLength, SummarySentenceCount, AverageSentenceLength, 
+  #            SummaryRepetitiveness, HedgingLanguageCount, FleschReadingEaseScore,
+  #            LLMJudge_Summarization, LLMJudge_Grounde_QA
+  summarization_metrics_enabled:
+    - "SummaryLength"
+    - "SummarySentenceCount"
+    - "AverageSentenceLength"
+    - "SummaryRepetitiveness"
+    - "HedgingLanguageCount"
+    - "FleschReadingEaseScore"
+    - "LLMJudge_Summarization"
+    - "LLMJudge_Grounde_QA"
+
+  # Metrics for classification/analysis tasks
+  # Available: LabelProperties, ResponseLengthChars, PotentialExplanationPresence,
+  #            LLMJudge_Classification
+  classification_metrics_enabled:
+    - "LabelProperties"
+    - "ResponseLengthChars"
+    - "PotentialExplanationPresence"
+    - "LLMJudge_Classification"
+
+  # Optional: Parameters for specific metrics
+  # These parameters will be passed to the respective metric's calculate method or constructor.
+  # Ensure the parameter names match what the metric class expects.
+  metric_parameters:
+    SummaryRepetitiveness:
+      min_trigram_length: 3
+    PotentialExplanationPresence:
+      explanation_threshold_words: 5
+    # LabelProperties might need allowed_labels if you want to enforce a specific set.
+    # This would typically be experiment-specific rather than global.
+    # LabelProperties:
+    #   allowed_labels: ["label1", "label2"] 
+
 retry_settings:
   attempts: 3
   wait_initial: 1

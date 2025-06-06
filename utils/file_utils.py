@@ -1,5 +1,6 @@
 from core.gcp_client import get_storage_client
 from typing import List
+import yaml
 
 def list_gcs_audio_files(bucket_name: str, folder_path: str) -> List[str]:
     """
@@ -21,3 +22,9 @@ def list_gcs_audio_files(bucket_name: str, folder_path: str) -> List[str]:
         if blob.name.endswith(audio_extensions) and not blob.name.endswith('/'):
             audio_files.append(f"gs://{bucket_name}/{blob.name}")
     return audio_files
+
+def load_config(config_path: str = "configs/main_config.yaml") -> dict:
+    """Loads a YAML configuration file."""
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
