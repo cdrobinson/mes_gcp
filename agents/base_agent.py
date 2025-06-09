@@ -4,7 +4,7 @@ import uuid
 from typing import Dict, Any, Tuple, Optional
 from core.gcp_client import (
     get_speech_to_text_client,
-    get_speech_to_text_config as get_base_stt_config, # Renamed to avoid conflict
+    get_speech_to_text_config as get_base_stt_config,
     get_gemini_model,
     get_gemini_generation_config,
     get_gcp_project_id,

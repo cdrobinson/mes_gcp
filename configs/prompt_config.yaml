@@ -1,7 +1,7 @@
 # Default prompts for agents
 # You can override these in the experiment notebooks
 
-call_summarization:
+call_summarisation:
   system_prompt: "You are an expert in summarizing call transcripts."
   user_prompt: |
     Please summarize the following call transcript concisely, highlighting the main topics discussed,

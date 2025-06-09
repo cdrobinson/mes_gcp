@@ -1,3 +1,3 @@
 from .base_agent import BaseAgent
-from .call_summarization_agent import CallSummarizationAgent
+from .call_summarisation_agent import CallSummarisationAgent
 from .call_agent_analysis_agent import CallAgentAnalysisAgent

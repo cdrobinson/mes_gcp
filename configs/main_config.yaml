@@ -39,44 +39,34 @@ gcp:
     default_llm_config_name: "gemini_1_5_flash_default"
   bigquery:
     dataset_id: "mes_results"
-    summarization_table_id: "call_summarization_evaluations"
+    summarisation_table_id: "call_summarisation_evaluations"
     analysis_table_id: "call_agent_analysis_evaluations"
   gcs:
     audio_data_bucket: "your-gcs-bucket-for-audio"
     audio_dataset_paths:
-      sample_summarization_set: "path/to/your/summarization_audio_files/"
+      sample_summarisation_set: "path/to/your/summarisation_audio_files/"
       sample_analysis_set: "path/to/your/analysis_audio_files/"
 
 evaluation:
   # LLM config to use for LLM-as-a-Judge evaluations (from vertex_ai.llm_configurations)
   judge_llm_config_name: "gemini_1_5_flash_default"
 
-  # Metrics for summarization tasks
-  # Available: SummaryLength, SummarySentenceCount, AverageSentenceLength, 
-  #            SummaryRepetitiveness, HedgingLanguageCount, FleschReadingEaseScore,
-  #            LLMJudge_Summarization, LLMJudge_Grounde_QA
-  summarization_metrics_enabled:
+  summarisation_metrics_enabled:
     - "SummaryLength"
     - "SummarySentenceCount"
     - "AverageSentenceLength"
     - "SummaryRepetitiveness"
     - "HedgingLanguageCount"
     - "FleschReadingEaseScore"
-    - "LLMJudge_Summarization"
+    - "LLMJudge_Summarisation"
     - "LLMJudge_Grounde_QA"
 
-  # Metrics for classification/analysis tasks
-  # Available: LabelProperties, ResponseLengthChars, PotentialExplanationPresence,
-  #            LLMJudge_Classification
   classification_metrics_enabled:
     - "LabelProperties"
     - "ResponseLengthChars"
     - "PotentialExplanationPresence"
     - "LLMJudge_Classification"
 
-  # Optional: Parameters for specific metrics
-  # These parameters will be passed to the respective metric's calculate method or constructor.
-  # Ensure the parameter names match what the metric class expects.
   metric_parameters:
     SummaryRepetitiveness:
       min_trigram_length: 3

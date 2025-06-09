@@ -8,7 +8,7 @@ def load_prompt_config():
     if not os.path.exists(config_path):
         print(f"Warning: Prompt configuration file {config_path} not found. Using default prompts.")
         return {
-            'call_summarization': {
+            'call_summarisation': {
                 'system_prompt': "You are an expert in summarizing call transcripts.",
                 'user_prompt': "Please summarize the following call transcript: {transcript}"
             }
@@ -18,14 +18,14 @@ def load_prompt_config():
 
 prompt_config = load_prompt_config()
 
-class CallSummarizationAgent(BaseAgent):
-    """Agent for call summarization."""
+class CallSummarisationAgent(BaseAgent):
+    """Agent for call summarisation."""
 
     def __init__(self,
                  custom_prompt_template: Optional[str] = None,
                  custom_system_prompt: Optional[str] = None,
                  llm_config_name: Optional[str] = None): # Added llm_config_name
-        agent_type = "call_summarization"
+        agent_type = "call_summarisation"
 
         default_prompts = prompt_config.get(agent_type, {})
         prompt_template_to_use = custom_prompt_template if custom_prompt_template is not None else default_prompts.get('user_prompt', "Summarize: {transcript}")
@@ -39,5 +39,5 @@ class CallSummarizationAgent(BaseAgent):
         )
 
     def process(self, gcs_audio_path: str) -> Dict[str, Any]:
-        """Processes the audio file for call summarization."""
+        """Processes the audio file for call summarisation."""
         return self._common_process_steps(gcs_audio_path)

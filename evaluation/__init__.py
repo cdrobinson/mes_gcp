@@ -1,7 +1,7 @@
 from .llm_judge_evaluator import LLMJudgeEvaluator
 from .base_metric import BaseMetric
-from .summarization_metrics import (
-    AbstractSummarizationMetric, 
+from .summarisation_metrics import (
+    AbstractSummarisationMetric, 
     SummaryLength,
     SummarySentenceCount,
     AverageSentenceLength,
@@ -19,7 +19,7 @@ from .classification_metrics import (
 __all__ = [
     "LLMJudgeEvaluator",
     "BaseMetric",
-    "AbstractSummarizationMetric",
+    "AbstractSummarisationMetric",
     "SummaryLength",
     "SummarySentenceCount",
     "AverageSentenceLength",

@@ -21,28 +21,25 @@ class ExperimentRunner:
                  ):
         """
         Args:
-            agent_class (Type[BaseAgent]): The class of the agent to instantiate (e.g., CallSummarizationAgent).
+            agent_class (Type[BaseAgent]): The class of the agent to instantiate (e.g., CallSummarisationAgent).
         """
         self.agent_class = agent_class
-        self.config = load_config() # Load global config
+        self.config = load_config()
         self.evaluation_config = self.config.get("evaluation", {})
         self.judge_llm_config_name = self.evaluation_config.get("judge_llm_config_name")
         self.metric_params = self.evaluation_config.get("metric_parameters", {})
 
-        # Dynamically instantiate selected metric calculators
-        self.metric_calculators: Dict[str, BaseMetric] = {}
         self._initialize_metric_calculators()
 
     def _initialize_metric_calculators(self):
         """Initializes metric calculator instances based on the config."""
-        # Determine if agent is for summarization or classification to pick the right metric list
         agent_name_lower = self.agent_class.__name__.lower()
-        is_summarization_agent = "summary" in agent_name_lower or "summarization" in agent_name_lower
+        is_summarisation_agent = "summary" in agent_name_lower or "summarisation" in agent_name_lower
         is_classification_agent = "classification" in agent_name_lower or "analysis" in agent_name_lower or "label" in agent_name_lower
 
         metric_names_to_load: List[str] = []
-        if is_summarization_agent:
-            metric_names_to_load = self.evaluation_config.get("summarization_metrics_enabled", [])
+        if is_summarisation_agent:
+            metric_names_to_load = self.evaluation_config.get("summarisation_metrics_enabled", [])
         elif is_classification_agent:
             metric_names_to_load = self.evaluation_config.get("classification_metrics_enabled", [])
         else:
@@ -55,7 +52,7 @@ class ExperimentRunner:
             "SummaryRepetitiveness": (SummaryRepetitiveness, None),
             "HedgingLanguageCount": (HedgingLanguageCount, None),
             "FleschReadingEaseScore": (FleschReadingEaseScore, None),
-            "LLMJudge_Summarization": (LLMJudgeEvaluator, "summarization"),
+            "LLMJudge_Summarisation": (LLMJudgeEvaluator, "summarisation"),
             "LLMJudge_Grounde_QA": (LLMJudgeEvaluator, "summary_groundedness"),
             "LabelProperties": (LabelProperties, None),
             "ResponseLengthChars": (ResponseLengthChars, None),
@@ -77,7 +74,7 @@ class ExperimentRunner:
                     if MetricClass == LLMJudgeEvaluator:
                         # For LLM Judge, we use a single instance if judge_llm_config_name is the same,
                         # but we will differentiate its tasks later during the _calculate_all_metrics call.
-                        # The key in self.metric_calculators will be the specific task, e.g., "LLMJudge_Summarization".
+                        # The key in self.metric_calculators will be the specific task, e.g., "LLMJudge_Summarisation".
                         if metric_name_from_config not in self.metric_calculators:
                              self.metric_calculators[metric_name_from_config] = LLMJudgeEvaluator(judge_llm_config_name=self.judge_llm_config_name)
                     elif metric_name_from_config not in self.metric_calculators: # For non-LLM judge metrics
@@ -92,20 +89,16 @@ class ExperimentRunner:
         all_results = {}
         llm_response = agent_output.get("llm_output", "")
         transcript = agent_output.get("transcript", "") 
-        # Potentially add other fields from agent_output if metrics need them, e.g. 'confidence' for LabelProperties
-        # agent_confidence = agent_output.get("confidence_score") 
 
-        # This map is needed again to link the config key (metric_name_from_config) to the judge_task_type
         metric_to_judge_task_map = {
-            "LLMJudge_Summarization": "summarization",
+            "LLMJudge_Summarisation": "summarisation",
             "LLMJudge_Grounde_QA": "summary_groundedness",
             "LLMJudge_Classification": "classification",
         }
 
         for metric_key_from_config, calculator_instance in self.metric_calculators.items():
-            calculate_kwargs = {} # Parameters for the .calculate() method
+            calculate_kwargs = {}
             
-            # Get class-level parameters (e.g. for SummaryRepetitiveness from metric_params in config)
             class_name_for_params = calculator_instance.__class__.__name__
             class_specific_config_params = self.metric_params.get(class_name_for_params, {})
             calculate_kwargs.update(class_specific_config_params)
@@ -114,7 +107,7 @@ class ExperimentRunner:
                 judge_task_type = metric_to_judge_task_map.get(metric_key_from_config)
                 if judge_task_type:
                     calculate_kwargs["task_type"] = judge_task_type
-                    if judge_task_type == "summarization" or judge_task_type == "summary_groundedness":
+                    if judge_task_type == "summarisation" or judge_task_type == "summary_groundedness":
                         calculate_kwargs["transcript"] = transcript
                     # Example: if classification judge needed original input text for context
                     # if judge_task_type == "classification":
@@ -123,17 +116,9 @@ class ExperimentRunner:
                     print(f"Warning: Could not determine task_type for LLM Judge metric key '{metric_key_from_config}'. Skipping.")
                     continue
             elif isinstance(calculator_instance, LabelProperties):
-                # Example: If LabelProperties needs 'allowed_labels' or 'confidence' from agent_output or experiment setup
-                # This would be more robust if agent_output consistently provided these when available.
-                # For now, we rely on them being in metric_params if globally set, or passed via agent_output if dynamic.
-                # if agent_output.get("predicted_label_confidence") is not None:
-                #    calculate_kwargs["confidence"] = agent_output.get("predicted_label_confidence")
-                # if agent_output.get("applicable_allowed_labels") is not None:
-                #    calculate_kwargs["allowed_labels"] = agent_output.get("applicable_allowed_labels")
-                pass # Assuming metric_params in config can set allowed_labels if static
+                pass
 
             try:
-                # print(f"Calculating metric: {metric_key_from_config} with instance {calculator_instance} and kwargs {calculate_kwargs}")
                 metric_result = calculator_instance.calculate(llm_response, **calculate_kwargs)
                 all_results.update(metric_result)
             except Exception as e:
@@ -176,25 +161,20 @@ class ExperimentRunner:
             for llm_config_name in llm_config_names:
                 print(f"  Using LLM configuration: {llm_config_name}")
                 try:
-                    # Instantiate agent for each LLM config to ensure fresh state
-                    # Pass llm_config_name to agent constructor
                     agent = self.agent_class(
                         custom_prompt_template=global_prompt_override,
                         custom_system_prompt=global_system_prompt_override,
                         llm_config_name=llm_config_name
                     )
-                    
-                    # Apply global LLM parameter overrides if any
-                    # This will update the agent's current LLM generation config
+
                     if global_llm_parameters_override:
                         agent.update_llm_configuration(
-                            llm_config_name=llm_config_name, # Ensure it re-bases on the correct config
+                            llm_config_name=llm_config_name,
                             generation_config_override=global_llm_parameters_override
                         )
 
-
                     start_time = time.time()
-                    agent_output = agent.process(gcs_uri) # Agent now uses its configured LLM
+                    agent_output = agent.process(gcs_uri)
                     end_time = time.time()
                     total_processing_time = round(end_time - start_time, 3)
 
@@ -212,14 +192,12 @@ class ExperimentRunner:
                         combined_result["global_prompt_override"] = global_prompt_override
                     if global_system_prompt_override:
                         combined_result["global_system_prompt_override"] = global_system_prompt_override
-                    
-                    # llm_metadata from agent_output already contains llm_config_name and gen_config_used
 
                     all_experiment_results.append(combined_result)
-                    print(f"    Successfully processed with {llm_config_name}")
+                    print(f"Successfully processed with {llm_config_name}")
 
                 except Exception as e:
-                    print(f"    Error processing {gcs_uri} with LLM config {llm_config_name}: {e}")
+                    print(f"Error processing {gcs_uri} with LLM config {llm_config_name}: {e}")
                     error_result = {
                         "run_id": agent_output.get("run_id", "error_run") if 'agent_output' in locals() else "error_run_pre_agent",
                         "gcs_audio_path": gcs_uri,

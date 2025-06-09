@@ -17,45 +17,10 @@ def get_config_path():
 def load_config():
     """Loads the main configuration file."""
     config_path = get_config_path()
-    if not os.path.exists(config_path):
-        print(f"Warning: Configuration file {config_path} not found. Using default/empty values.")
-        # Fallback to a minimal structure to avoid KeyErrors later
-        return {
-            'gcp': {
-                'project_id': 'your-gcp-project-id',
-                'location': 'your-gcp-region',
-                'speech_to_text': {
-                    'recognizer_id': '_',
-                    'model': 'telephony',
-                    'language_codes': ['en-US'],
-                    'features': {'enable_automatic_punctuation': True}
-                },
-                'vertex_ai': {
-                    'llm_configurations': {
-                        'default_llm': { # Ensure a default exists
-                            'gemini_model_name': 'gemini-1.5-flash-001',
-                            'generation_config': {'temperature': 0.2, 'max_output_tokens': 1024}
-                        }
-                    },
-                    'default_llm_config_name': 'default_llm'
-                },
-                'bigquery': {
-                    'dataset_id': 'mes_results',
-                    'summarization_table_id': 'call_summarization_evaluations',
-                    'analysis_table_id': 'call_agent_analysis_evaluations'
-                },
-                'gcs': {
-                     'audio_data_bucket': "your-gcs-bucket-for-audio"
-                }
-            },
-            'retry_settings': {'attempts': 1} # Minimal retry for fallback
-        }
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
 config = load_config()
-
-# --- GCP Clients ---
 
 @lru_cache(maxsize=None)
 def get_vertex_ai_client():
@@ -76,10 +41,10 @@ def get_llm_config(llm_config_name: str) -> Dict[str, Any]:
         raise ValueError(f"LLM configuration '{llm_config_name}' not found in main_config.yaml.")
     return llm_conf
 
-@lru_cache(maxsize=10) # Cache a few model instances if they are frequently switched
+@lru_cache(maxsize=10)
 def get_gemini_model(llm_config_name: str) -> GenerativeModel:
     """Initializes and returns a Gemini model instance based on the named configuration."""
-    get_vertex_ai_client() # Ensure Vertex AI is initialized
+    get_vertex_ai_client()
     specific_llm_config = get_llm_config(llm_config_name)
     model_name = specific_llm_config['gemini_model_name']
     model = GenerativeModel(model_name)
@@ -146,8 +111,8 @@ def get_gcp_location() -> str:
 def get_bq_dataset_id() -> str:
     return config['gcp']['bigquery']['dataset_id']
 
-def get_bq_summarization_table_id() -> str:
-    return config['gcp']['bigquery']['summarization_table_id']
+def get_bq_summarisation_table_id() -> str:
+    return config['gcp']['bigquery']['summarisation_table_id']
 
 def get_bq_analysis_table_id() -> str:
     return config['gcp']['bigquery']['analysis_table_id']
@@ -162,23 +127,3 @@ def get_retry_config() -> dict:
     return config.get('retry_settings', {
         'attempts': 3, 'wait_initial': 1, 'wait_multiplier': 2, 'wait_max': 10
     })
-
-if __name__ == '__main__':
-    print(f"GCP Project ID: {get_gcp_project_id()}")
-    default_llm_conf_name = config['gcp']['vertex_ai']['default_llm_config_name']
-    print(f"Default LLM Config Name: {default_llm_conf_name}")
-    default_llm_actual_config = get_llm_config(default_llm_conf_name)
-    print(f"Default LLM Model: {default_llm_actual_config['gemini_model_name']}")
-
-    try:
-        bq_client = get_bigquery_client()
-        print(f"BigQuery client initialized for project: {bq_client.project}")
-        stt_client = get_speech_to_text_client()
-        print(f"Speech-to-Text client initialized: {stt_client}")
-        gcs_client = get_storage_client()
-        print(f"GCS client initialized for project: {gcs_client.project}")
-        gemini_model_instance = get_gemini_model(default_llm_conf_name) # Test with default
-        print(f"Gemini model loaded: {gemini_model_instance._model_name}")
-    except Exception as e:
-        print(f"Error initializing clients: {e}")
-        print("Please ensure your GCP authentication and configuration are correct.")

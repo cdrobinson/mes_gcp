@@ -5,7 +5,7 @@ from vertexai.generative_models import Part, GenerationConfig
 from core.retry_handler import default_retry_decorator
 from .base_metric import BaseMetric
 
-class LLMJudgeEvaluator(BaseMetric): # Inherit from BaseMetric
+class LLMJudgeEvaluator(BaseMetric):
     """
     LLM-as-a-Judge evaluator for assessing text quality across multiple dimensions.
     Uses a separate LLM instance to evaluate generated content.
@@ -367,31 +367,24 @@ GROUNDEDNESS_SUPPORT: [score] - [brief overall explanation of why this score was
                 "llm_judge_metadata": {"error": str(e)}
             }
 
-    # Implementing the abstract method from BaseMetric
     def calculate(self, llm_response: str, task_type: str, **kwargs) -> Dict[str, Any]:
         """
         Generic calculate method to route to specific evaluation types.
         Args:
             llm_response: The response from the LLM.
-            task_type: 'summarization' or 'classification'.
-            **kwargs: Additional arguments (e.g., 'transcript' for summarization, 
+            task_type: 'summarisation' or 'classification'.
+            **kwargs: Additional arguments (e.g., 'transcript' for summarisation, 
                                             'input_text' for classification).
         Returns:
             A dictionary of calculated LLM-as-a-judge metrics.
         """
-        if task_type == "summarization":
+        if task_type == "summarisation":
             transcript = kwargs.get("transcript")
             return self.evaluate_summary(summary=llm_response, transcript=transcript)
         elif task_type == "classification":
             input_text = kwargs.get("input_text")
             return self.evaluate_classification(llm_response=llm_response, input_text=input_text)
         elif task_type == "summary_groundedness":
-            # llm_response here is the summary to be evaluated for groundedness
             return self.evaluate_summary_groundedness_qa(summary=llm_response)
         else:
             return {"error": f"Unsupported task_type for LLMJudgeEvaluator: {task_type}"}
-
-    # Remove or adapt evaluate_analysis if it's not directly a classification/summarization task
-    # For now, let's assume 'evaluate_classification' covers the 'analysis' use case.
-    # def evaluate_analysis(self, transcript: str, analysis: str) -> Dict[str, Any]:
-    #     ... (Keep if a distinct 'analysis' task type is needed, otherwise remove)
