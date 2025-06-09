@@ -3,17 +3,11 @@ import time
 import uuid
 from typing import Dict, Any, Tuple, Optional
 from core.gcp_client import (
-    get_speech_to_text_client,
-    get_speech_to_text_config as get_base_stt_config,
     get_gemini_model,
     get_gemini_generation_config,
-    get_gcp_project_id,
-    get_gcp_location,
-    get_recognizer_path,
     config as global_main_config
 )
 from core.retry_handler import default_retry_decorator
-from google.cloud.speech_v2.types import cloud_speech
 from vertexai.generative_models import Part, GenerationConfig, GenerativeModel
 
 class BaseAgent(ABC):
@@ -27,13 +21,6 @@ class BaseAgent(ABC):
         self.agent_type = agent_type
         self.prompt_template = prompt_template
         self.system_prompt = system_prompt
-
-        self.stt_client = get_speech_to_text_client()
-        self.stt_config = get_base_stt_config() # Gets the general STT config
-
-        self.project_id = get_gcp_project_id()
-        self.location = get_gcp_location()
-        self.recognizer_id = global_main_config['gcp']['speech_to_text'].get('recognizer_id', '_')
 
         self.update_llm_configuration(llm_config_name)
 
@@ -70,53 +57,14 @@ class BaseAgent(ABC):
         self.current_llm_generation_config_dict = self.gemini_gen_config.to_dict()
 
 
-    @default_retry_decorator()
-    def _transcribe_audio_gcs_v2(self, gcs_uri: str) -> Tuple[str, float, float, Dict[str, Any]]:
-        """Transcribes audio from GCS using Speech-to-Text v2."""
-        stt_start_time = time.time()
-        recognizer_path = get_recognizer_path(self.project_id, self.location, self.recognizer_id)
-
-        # For GCS URIs, use BatchRecognizeFiles for robustness with longer audio
-        operation = self.stt_client.batch_recognize(
-            recognizer=recognizer_path,
-            config=self.stt_config, # Use the general STT config
-            files=[cloud_speech.BatchRecognizeFileMetadata(uri=gcs_uri)]
-        )
-
-        print(f"Waiting for transcription operation {operation.operation.name} for {gcs_uri} to complete...")
-        response = operation.result(timeout=360) # Increased timeout for potentially longer files
-
-        stt_end_time = time.time()
-        stt_processing_time = stt_end_time - stt_start_time
-
-        transcript_parts = []
-        # audio_duration is not directly available in BatchRecognizeFilesResponse easily.
-        # It's better to get this from GCS metadata or a separate audio processing step if critical.
-        audio_duration_placeholder = 0.0
-
-        if response is not None and hasattr(response, 'results') and response.results and gcs_uri in response.results:
-            file_result = response.results[gcs_uri]
-            if file_result.transcript and file_result.transcript.results:
-                for result_segment in file_result.transcript.results:
-                    if result_segment.alternatives:
-                        transcript_parts.append(result_segment.alternatives[0].transcript)
-            elif file_result.error:
-                print(f"Error in transcription for {gcs_uri}: {file_result.error.message}")
-                raise Exception(f"Transcription error for {gcs_uri}: {file_result.error.message}")
-            else:
-                print(f"No transcript results found for {gcs_uri} in the response.")
-        else:
-            print(f"No results found for GCS URI {gcs_uri} in batch recognition response.")
-
-        full_transcript = " ".join(transcript_parts).strip()
-
-        transcription_metadata = {
-            "audio_duration_seconds": audio_duration_placeholder, # Placeholder
-            "language_code_used": self.stt_config.language_codes[0] if self.stt_config.language_codes else "N/A",
-            "stt_model_used": self.stt_config.model,
-            "recognizer_used": recognizer_path,
-        }
-        return full_transcript, stt_processing_time, audio_duration_placeholder, transcription_metadata
+    @abstractmethod
+    def _transcribe_audio(self, gcs_uri: str) -> Tuple[str, float, float, Dict[str, Any]]:
+        """
+        Transcribes audio from GCS.
+        Subclasses MUST override this to provide a transcription implementation
+        (e.g., using Gemini, Speech-to-Text API, or another service).
+        """
+        pass
 
     @default_retry_decorator()
     def _call_llm(self, transcript: str) -> Tuple[str, float, Dict[str, Any]]:
@@ -165,7 +113,7 @@ class BaseAgent(ABC):
         run_id = str(uuid.uuid4())
         print(f"Processing {gcs_audio_path} for agent {self.agent_type} (LLM config: {self.llm_config_name}) with run_id {run_id}")
 
-        transcript, stt_time, audio_duration, stt_meta = self._transcribe_audio_gcs_v2(gcs_audio_path)
+        transcript, stt_time, audio_duration, stt_meta = self._transcribe_audio(gcs_audio_path) # MODIFIED: Calls self._transcribe_audio
 
         if not transcript:
             print(f"Transcription failed or returned empty for {gcs_audio_path}")

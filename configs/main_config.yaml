@@ -1,17 +1,6 @@
 gcp:
   project_id: "your-gcp-project-id"
   location: "your-gcp-region" # e.g., us-central1
-  speech_to_text:
-    recognizer_id: "_" # Optional: Specific recognizer ID, use "_" for default/auto
-    model: "telephony"
-    language_codes: ["en-US"]
-    features:
-      enable_automatic_punctuation: True
-      # enable_word_time_offsets: True
-      # diarization_config:
-      #   enable_speaker_diarization: True
-      #   min_speaker_count: 1
-      #   max_speaker_count: 2
   vertex_ai:
     # Define multiple LLM configurations here
     llm_configurations:
