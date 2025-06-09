@@ -119,7 +119,6 @@ OVERALL: [score] - [brief overall assessment]
             'CONCISENESS': 'conciseness',
             'COHERENCE': 'coherence',
             'CLARITY': 'clarity',
-            # Dimensions for general analysis/classification
             'APPROPRIATENESS': 'appropriateness',
             'CONFIDENCE_JUSTIFICATION': 'confidence_justification',
             'CLARITY_OF_REASONING': 'clarity_of_reasoning',

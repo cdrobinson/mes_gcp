@@ -1,5 +1,7 @@
 from abc import abstractmethod
 from typing import Dict, Any
+
+import textstat
 from .base_metric import BaseMetric
 
 class AbstractSummarisationMetric(BaseMetric):
@@ -16,196 +18,35 @@ class AbstractSummarisationMetric(BaseMetric):
         """
         pass
 
-class SummaryLength(AbstractSummarisationMetric):
-    """Calculates length-based metrics for a summary."""
-    def calculate(self, summary: str, **kwargs) -> Dict[str, Any]:
-        if not summary or not summary.strip():
-            return {"summary_length_chars": 0, "summary_length_words": 0}
-        return {
-            "summary_length_chars": len(summary),
-            "summary_length_words": len(summary.split())
-        }
-
-class SummarySentenceCount(AbstractSummarisationMetric):
-    """Calculates the number of sentences in the summary."""
-    def calculate(self, summary: str, **kwargs) -> Dict[str, Any]:
-        if not summary or not summary.strip():
-            return {"summary_sentence_count": 0}
-
-        delimiters = ".!?"
-        count = 0
-        for char_idx, char in enumerate(summary):
-            if char in delimiters:
-                if char_idx + 1 < len(summary) and summary[char_idx+1].isspace():
-                    count +=1
-                elif char_idx == len(summary) -1: # Ends with a delimiter
-                    count +=1
-        if count == 0 and len(summary.strip()) > 0 :
-             count = 1
-        return {"summary_sentence_count": count}
-
-class AverageSentenceLength(AbstractSummarisationMetric):
-    """Calculates the average sentence length in words."""
-    def calculate(self, summary: str, **kwargs) -> Dict[str, Any]:
-        if not summary or not summary.strip():
-            return {"summary_avg_sentence_length": 0.0}
-
-        words = summary.split()
-        num_words = len(words)
-        if num_words == 0:
-            return {"summary_avg_sentence_length": 0.0}
-
-        # Using SummarySentenceCount logic for consistency
-        sentence_counter = SummarySentenceCount()
-        sentence_count_metric = sentence_counter.calculate(summary)
-        num_sentences = sentence_count_metric.get("summary_sentence_count", 0)
-
-        if num_sentences == 0:
-            # If no sentences detected by that logic but words exist, treat as one long sentence.
-            return {"summary_avg_sentence_length": float(num_words) if num_words > 0 else 0.0}
-            
-        return {"summary_avg_sentence_length": round(num_words / num_sentences, 2)}
-
-class SummaryRepetitiveness(AbstractSummarisationMetric):
-    """Calculates basic repetitiveness based on trigram repetition."""
-    def calculate(self, summary: str, min_trigram_length: int = 3, **kwargs) -> Dict[str, Any]:
-        if not summary or not summary.strip():
-            return {"summary_repeated_trigrams_ratio": 0.0, "summary_distinct_trigrams_count": 0}
-
-        words = [word.lower() for word in summary.split()]
-        if len(words) < min_trigram_length:
-            return {"summary_repeated_trigrams_ratio": 0.0, "summary_distinct_trigrams_count": len(words)}
-
-        trigrams = {}
-        repeated_trigram_count = 0
-        total_trigrams = 0
-
-        for i in range(len(words) - (min_trigram_length - 1)):
-            trigram = tuple(words[i : i + min_trigram_length])
-            total_trigrams += 1
-            if trigram in trigrams:
-                trigrams[trigram] += 1
-                if trigrams[trigram] == 2: # Count first instance of repetition
-                    repeated_trigram_count +=1 
-            else:
-                trigrams[trigram] = 1
-        
-        distinct_trigrams_count = len(trigrams)
-        
-        if total_trigrams == 0:
-             return {"summary_repeated_trigrams_ratio": 0.0, "summary_distinct_trigrams_count": 0}
-
-        # Ratio of trigrams that are repeated at least once
-        repeated_trigrams_ratio = (repeated_trigram_count / distinct_trigrams_count) if distinct_trigrams_count > 0 else 0.0
-        
-        return {
-            "summary_repeated_trigrams_ratio": round(repeated_trigrams_ratio, 4),
-            "summary_distinct_trigrams_count": distinct_trigrams_count
-        }
-
-class HedgingLanguageCount(AbstractSummarisationMetric):
-    """Counts the occurrences of common hedging words and phrases."""
-    HEDGING_TERMS = [
-        "may", "might", "could", "can", "possibly", "perhaps", "suggests", 
-        "appears", "seems", "likely", "unlikely", "probable", "improbable",
-        "assume", "believe", "estimate", "indicate", "potential", "tend to",
-        "to some extent", "somewhat", "often", "usually", "generally", "reportedly"
-    ]
-
-    def calculate(self, summary: str, **kwargs) -> Dict[str, Any]:
-        if not summary or not summary.strip():
-            return {"summary_hedging_terms_count": 0, "summary_hedging_terms_density": 0.0}
-
-        words = [word.lower() for word in summary.split()]
-        num_words = len(words)
-        if num_words == 0:
-            return {"summary_hedging_terms_count": 0, "summary_hedging_terms_density": 0.0}
-
-        count = 0
-
-        for term in self.HEDGING_TERMS:
-            if ' ' not in term: # Only count single words for simplicity here
-                count += words.count(term)
-            else: # Basic phrase checking
-                # This is a simplified phrase check, might catch parts of words or be slow
-                if term in summary.lower():
-                    count += summary.lower().count(term)
-
-
-        density = count / num_words if num_words > 0 else 0.0
-        
-        return {
-            "summary_hedging_terms_count": count,
-            "summary_hedging_terms_density": round(density, 4)
-        }
 
 class FleschReadingEaseScore(AbstractSummarisationMetric):
     """Calculates the Flesch Reading Ease score."""
-
-    def _count_syllables_in_word(self, word: str) -> int:
-        word = word.lower().strip()
-        if not word:
-            return 0
-        
-        # Handle some common cases and abbreviations that might be miscounted
-        if len(word) <= 3: # e.g. "the", "an", "is"
-            return 1
-        if word.endswith("es") and len(word) > 2 and word[-3] not in "aeiouy": # e.g. "bikes" vs "goes"
-             word = word[:-2]
-        elif word.endswith("e") and len(word) > 1 and word[-2] not in "aeiouy" and not (len(word) > 2 and word[-2] == 'l' and word[-3] not in "aeiouy"): # silent e, but not for "le" like "able"
-            if len(word) > 2 and word[-2] == 'l' and word[-3] in "aeiouy": # e.g. "whale"
-                 pass # keep the 'e' for now
-            elif len(word) == 2 and word[0] in "aeiouy": # e.g. "be", "he"
-                 pass
-            else:
-                word = word[:-1]
-
-        vowels = "aeiouy"
-        syllable_count = 0
-        prev_char_was_vowel = False
-        for char in word:
-            if char in vowels:
-                if not prev_char_was_vowel:
-                    syllable_count += 1
-                prev_char_was_vowel = True
-            else:
-                prev_char_was_vowel = False
-        
-        if syllable_count == 0 and len(word) > 0: # for words like "rhythm"
-            return 1
-        return syllable_count
-
-    def _count_total_syllables(self, text: str) -> int:
-        words = text.split()
-        total_syllables = 0
-        for word in words:
-            total_syllables += self._count_syllables_in_word(word)
-        return total_syllables
 
     def calculate(self, summary: str, **kwargs) -> Dict[str, Any]:
         if not summary or not summary.strip():
             return {"summary_flesch_reading_ease": 0.0}
 
-        words = summary.split()
-        num_words = len(words)
-        
-        sentence_counter = SummarySentenceCount()
-        sentence_count_metric = sentence_counter.calculate(summary)
-        num_sentences = sentence_count_metric.get("summary_sentence_count", 0)
+        try:
+            textstat.set_lang("en_UK")
+            score = textstat.flesch_reading_ease(summary)
+        except Exception as e:
+            print(f"Could not calculate Flesch Reading Ease score: {e}")
+            score = 0.0
+            
+        return {"summary_flesch_reading_ease": round(score, 2)}
 
-        if num_words == 0 or num_sentences == 0:
-            # Avoid division by zero; score is not meaningful
-            return {"summary_flesch_reading_ease": 0.0} 
+class GunningFogIndex(AbstractSummarisationMetric):
+    """Calculates the Gunning Fog Index."""
 
-        num_syllables = self._count_total_syllables(summary)
-        if num_syllables == 0 and num_words > 0: # if syllable count is zero but words exist, it's an issue with syllable counter
-             # Fallback: assign average 1.5 syllables per word to avoid crash, though score will be rough
-             num_syllables = int(num_words * 1.5)
-
+    def calculate(self, summary: str, **kwargs) -> Dict[str, Any]:
+        if not summary or not summary.strip():
+            return {"summary_gunning_fog_index": 0.0}
 
         try:
-            score = 206.835 - 1.015 * (num_words / num_sentences) - 84.6 * (num_syllables / num_words)
-        except ZeroDivisionError:
-            return {"summary_flesch_reading_ease": 0.0} # Should be caught by earlier checks
-
-        return {"summary_flesch_reading_ease": round(score, 2)}
+            textstat.set_lang("en_UK")
+            score = textstat.gunning_fog(summary)
+        except Exception as e:
+            print(f"Could not calculate Gunning Fog Index: {e}")
+            score = 0.0
+            
+        return {"summary_gunning_fog_index": round(score, 2)}

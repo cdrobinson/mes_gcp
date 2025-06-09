@@ -7,7 +7,8 @@ from .summarisation_metrics import (
     AverageSentenceLength,
     SummaryRepetitiveness,
     HedgingLanguageCount,
-    FleschReadingEaseScore
+    FleschReadingEaseScore,
+    GunningFogIndex
 )
 from .classification_metrics import (
     AbstractClassificationMetric, 
@@ -26,6 +27,7 @@ __all__ = [
     "SummaryRepetitiveness",
     "HedgingLanguageCount",
     "FleschReadingEaseScore",
+    "GunningFogIndex",
     "AbstractClassificationMetric",
     "LabelProperties",
     "ResponseLengthChars",
