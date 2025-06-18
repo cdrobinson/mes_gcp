@@ -9,23 +9,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 import yaml
 
-try:
-    from ..clients.gcs_client import GCSClient
-    from ..clients.gemini_client import GeminiClient
-    from ..utils.audio_loader import AudioLoader
-    from ..metrics.base_metric import BaseMetric
-    from ..metrics.transcription.transcript_quality import TranscriptQualityMetric
-    from ..metrics.safety.safety import SafetyMetric
-except ImportError:
-    import sys
-    import os
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-    from clients.gcs_client import GCSClient
-    from clients.gemini_client import GeminiClient
-    from utils.audio_loader import AudioLoader
-    from metrics.base_metric import BaseMetric
-    from metrics.transcription.transcript_quality import TranscriptQualityMetric
-    from metrics.safety.safety import SafetyMetric
+from clients.gcs_client import GCSClient
+from clients.gemini_client import GeminiClient
+from utils.audio_loader import AudioLoader
+from metrics.base_metric import BaseMetric
+from metrics.transcription.transcript_quality import TranscriptQualityMetric
+from metrics.safety.safety import SafetyMetric
 
 logger = logging.getLogger(__name__)
 
@@ -118,9 +107,6 @@ class ExperimentRunner:
         # Convert results to DataFrame
         results_df = pd.DataFrame(self.results)
         
-        # Save results
-        self._save_results(results_df)
-        
         return results_df
     
     def _get_audio_files(self) -> List[str]:
@@ -153,6 +139,7 @@ class ExperimentRunner:
         
         gemini_client = GeminiClient(
             model_id=experiment['model_id'],
+            config={'project_id': self.config['project'], 'location': self.config['location']},
             max_attempts=self.config.get('retry', {}).get('max_attempts', 3)
         )
         
@@ -301,44 +288,6 @@ class ExperimentRunner:
                 'processing_time': time.time() - start_time,
                 'timestamp': datetime.now().isoformat()
             }
-
-    def _save_results(self, results_df: pd.DataFrame):
-        """Save experiment results to GCS"""
-        try:
-            # Save as CSV
-            csv_data = results_df.to_csv(index=False)
-            csv_uri = self.gcs_client.upload_results(
-                csv_data, 
-                "transcription_experiments", 
-                self.run_timestamp, 
-                "results.csv"
-            )
-            
-            # Save as JSON for detailed analysis
-            json_data = results_df.to_json(orient='records', indent=2)
-            json_uri = self.gcs_client.upload_results(
-                json_data,
-                "transcription_experiments",
-                self.run_timestamp,
-                "results.json"
-            )
-            
-            # Save configuration for reproducibility
-            config_data = yaml.dump(self.config, default_flow_style=False)
-            config_uri = self.gcs_client.upload_results(
-                config_data,
-                "transcription_experiments",
-                self.run_timestamp,
-                "config.yaml"
-            )
-            
-            logger.info(f"Results saved to GCS:")
-            logger.info(f"  CSV: {csv_uri}")
-            logger.info(f"  JSON: {json_uri}")
-            logger.info(f"  Config: {config_uri}")
-            
-        except Exception as e:
-            logger.error(f"Error saving results: {e}")
 
     def get_experiment_summary(self) -> Dict[str, Any]:
         """Get a summary of the current experiment run"""

@@ -13,6 +13,10 @@ class SafetyMetric(BaseMetric):
 
     # Mapping from Vertex AI's probability names to a numerical score.
     # These values are chosen to represent the categorical probabilities.
+    # NOTE: This is an internal convention based on empirical estimation.
+    # The meaning of "LOW", "HIGH", etc. could change in future Vertex AI API versions,
+    # which would silently affect metric scores. This mapping may need to be revisited
+    # if the underlying API changes.
     PROBABILITY_MAPPING = {
         "NEGLIGIBLE": 0.1,
         "LOW": 0.4,

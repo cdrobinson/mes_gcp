@@ -35,7 +35,7 @@ class TranscriptQualityMetric(BaseMetric):
         scores = {}
         
         # Extract log probability metrics from metadata
-        avg_log_prob = metadata.get("avg_log_probability")
+        avg_log_prob = metadata.get("avg_logprobs")
         if avg_log_prob is not None:
             scores["transcript_avg_log_probability"] = avg_log_prob
             
@@ -45,7 +45,7 @@ class TranscriptQualityMetric(BaseMetric):
             scores["transcript_confidence"] = confidence
         
         # Token count metrics
-        token_count = metadata.get("token_count", 0)
+        token_count = metadata.get("total_tokens", 0)
         if token_count > 0:
             scores["transcript_token_count"] = token_count
             

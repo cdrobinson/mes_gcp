@@ -9,8 +9,6 @@ numpy
 scipy
 scikit-learn
 tqdm
-aiohttp
-nest-asyncio
 jupyter
 matplotlib
 seaborn

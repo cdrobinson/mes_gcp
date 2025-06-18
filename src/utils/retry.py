@@ -1,6 +1,5 @@
 """Retry utilities with exponential backoff"""
 
-import asyncio
 import time
 from functools import wraps
 from typing import Callable, Any, Optional, Type, Union, Tuple
@@ -49,39 +48,3 @@ class RetryableClient:
             max_wait_time=self.max_wait_time,
             retry_exceptions=retry_exceptions
         )
-
-
-def async_retry_with_backoff(
-    max_attempts: int = 3,
-    backoff_factor: float = 2.0,
-    max_wait_time: float = 60.0,
-    retry_exceptions: Tuple[Type[Exception], ...] = (Exception,)
-):
-    """
-    Async version of retry decorator
-    """
-    def decorator(func: Callable):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            last_exception = None
-            wait_time = 1.0
-            
-            for attempt in range(max_attempts):
-                try:
-                    return await func(*args, **kwargs)
-                except retry_exceptions as e:
-                    last_exception = e
-                    if attempt < max_attempts - 1:
-                        logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait_time:.2f}s...")
-                        await asyncio.sleep(wait_time)
-                        wait_time = min(wait_time * backoff_factor, max_wait_time)
-                    else:
-                        logger.error(f"All {max_attempts} attempts failed. Last error: {e}")
-                        raise
-            
-            # This should never be reached, but just in case
-            if last_exception:
-                raise last_exception
-        
-        return wrapper
-    return decorator
