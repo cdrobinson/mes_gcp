@@ -180,6 +180,16 @@ class GeminiClient(RetryableClient):
             if hasattr(response, 'candidates') and response.candidates:
                 candidate = response.candidates[0]
                 metadata["avg_logprobs"] = getattr(candidate, 'avg_logprobs', None)
+                
+                # Extract safety ratings if available
+                if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
+                    safety_ratings = []
+                    for rating in candidate.safety_ratings:
+                        safety_ratings.append({
+                            "category": getattr(rating, 'category', 'unknown'),
+                            "probability": getattr(rating, 'probability', 'UNKNOWN')
+                        })
+                    metadata["safety_ratings"] = safety_ratings
         except Exception as e:
             logger.warning(f"Error extracting response metadata: {e}")
             metadata["metadata_extraction_error"] = str(e)
