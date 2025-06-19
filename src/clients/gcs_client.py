@@ -6,7 +6,8 @@ from pathlib import Path
 import fnmatch
 from google.cloud import storage
 from google.cloud.exceptions import NotFound, Forbidden
-from ..utils.retry import RetryableClient, retry_with_backoff
+
+from utils.retry import RetryableClient, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 

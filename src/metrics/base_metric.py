@@ -70,7 +70,44 @@ class BaseMetric(ABC):
             f"{self.name}_max": np.max(scores),
             f"{self.name}_median": np.median(scores)
         }
-
+    
+    def supports_batch_evaluation(self) -> bool:
+        """Check if this metric supports batch evaluation"""
+        return False
+    
+    def batch_compute(self, results_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Compute metrics for a batch of responses (default implementation)
+        
+        Args:
+            results_df: DataFrame containing experiment results
+            
+        Returns:
+            DataFrame with additional metric columns
+        """
+        # Default implementation: fall back to individual compute calls
+        if not self.supports_batch_evaluation():
+            import warnings
+            warnings.warn(f"Metric {self.name} does not support batch evaluation, falling back to individual calls")
+            
+            # Apply compute to each row individually
+            metric_columns = []
+            for idx, row in results_df.iterrows():
+                if hasattr(row, 'response_text') and hasattr(row, 'metadata'):
+                    scores = self.compute(
+                        response=row.get('response_text', ''),
+                        metadata=row.get('metadata', {})
+                    )
+                    
+                    # Add scores to the row
+                    for metric_name, score in scores.items():
+                        if metric_name not in metric_columns:
+                            metric_columns.append(metric_name)
+                        results_df.loc[idx, metric_name] = score
+            
+            return results_df
+        else:
+            raise NotImplementedError("Batch evaluation not implemented for this metric")
 
 class CompositeMetric(BaseMetric):
     """A metric that combines multiple sub-metrics"""

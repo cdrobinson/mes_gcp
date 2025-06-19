@@ -1,11 +1,16 @@
 project: "acme-insurance-llm"
 location: "us-central1"
 bucket: "mes-audio-bucket"
+
+vertexai:
+  project_id: "acme-insurance-llm"
+  location: "us-central1"
+  model_armour_template_id: "default"
+
 gcs_files:
   - "calls/claim_*.wav"
   - "calls/followup_*.wav"
 
-# Prompt templates
 prompts:
   transcription:
     prompt-v1: |
@@ -35,6 +40,7 @@ experiments:
     metrics:
       - "transcript_quality"
       - "safety"
+      - "vertexai_evaluation"
   
   - name: "transcription_flash"
     use_case: "transcription"
@@ -50,8 +56,8 @@ experiments:
     metrics:
       - "transcript_quality"
       - "safety"
+      - "vertexai_evaluation"
 
-# Operational settings
 concurrency:
   max_workers: 4
   batch_size: 8

@@ -1,4 +1,4 @@
-google-cloud-aiplatform
+google-cloud-aiplatform>=1.60.0
 google-genai
 google-cloud-storage
 google-cloud-dlp
@@ -13,3 +13,7 @@ jupyter
 matplotlib
 seaborn
 plotly
+# New dependencies for updated implementation
+vertexai>=1.60.0
+requests>=2.31.0
+google-auth>=2.21.0

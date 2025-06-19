@@ -3,11 +3,11 @@
 import logging
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, Any, List, Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import yaml
+
 
 from clients.gcs_client import GCSClient
 from clients.gemini_client import GeminiClient
@@ -15,6 +15,7 @@ from utils.audio_loader import AudioLoader
 from metrics.base_metric import BaseMetric
 from metrics.transcription.transcript_quality import TranscriptQualityMetric
 from metrics.safety.safety import SafetyMetric
+from metrics.evaluation.vertexai_evaluation import VertexAIEvaluationMetric
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +36,22 @@ class ExperimentRunner:
         self.gcs_client = self._init_gcs_client()
         self.audio_loader = AudioLoader()
         
+        # Initialize metrics with config
+        vertexai_config = self.config.get('vertexai', {})
+        project_id = vertexai_config.get('project_id', self.config['project'])
+        location = vertexai_config.get('location', self.config['location'])
+        
         self.available_metrics = {
             "transcript_quality": TranscriptQualityMetric(),
-            "safety": SafetyMetric()
+            "safety": SafetyMetric(
+                project_id=project_id,
+                location=location,
+                template_id=vertexai_config.get('model_armour_template_id', 'default')
+            ),
+            "vertexai_evaluation": VertexAIEvaluationMetric(
+                project_id=project_id,
+                location=location
+            )
         }
         
         # Results storage
@@ -100,12 +114,19 @@ class ExperimentRunner:
         audio_files = self._get_audio_files()
         logger.info(f"Processing {len(audio_files)} audio files")
         
-        # Run experiments
+        # Run experiments and collect all results
         for experiment in experiments_to_run:
             self._run_single_experiment(experiment, audio_files)
         
+        if not self.results:
+            logger.warning("No results to process")
+            return pd.DataFrame()
+        
         # Convert results to DataFrame
         results_df = pd.DataFrame(self.results)
+        
+        # Run batch evaluation for metrics that support it
+        results_df = self._run_batch_evaluations(results_df)
         
         return results_df
     
@@ -143,25 +164,20 @@ class ExperimentRunner:
             max_attempts=self.config.get('retry', {}).get('max_attempts', 3)
         )
         
-        # Get metrics for this experiment
         experiment_metrics = self._get_experiment_metrics(experiment)
         
-        # Get the prompt for this experiment
         prompt = self._get_prompt(experiment)
         
-        # Set up concurrency (keep batch processing as requested)
         concurrency_config = self.config.get('concurrency', {})
         max_workers = concurrency_config.get('max_workers', 4)
         batch_size = concurrency_config.get('batch_size', 8)
         
-        # Process audio files in batches
         for batch_start in range(0, len(audio_files), batch_size):
             batch_end = min(batch_start + batch_size, len(audio_files))
             batch_files = audio_files[batch_start:batch_end]
             
             logger.info(f"Processing batch {batch_start//batch_size + 1}: files {batch_start+1}-{batch_end}")
             
-            # Process batch with thread pool
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = []
                 
@@ -173,7 +189,6 @@ class ExperimentRunner:
                     )
                     futures.append((future, audio_file))
                 
-                # Collect results
                 for future, audio_file in futures:
                     try:
                         result = future.result(timeout=300)  # 5 minute timeout
@@ -184,6 +199,18 @@ class ExperimentRunner:
                         logger.error(f"Error processing {audio_file}: {e}")
         
         logger.info(f"Completed experiment: {experiment_name}")
+
+    def _get_mime_type_from_path(self, path: str) -> str:
+        """Get MIME type from file path"""
+        extension = path.lower().split('.')[-1]
+        mime_types = {
+            'wav': 'audio/wav',
+            'mp3': 'audio/mpeg',
+            'flac': 'audio/flac',
+            'm4a': 'audio/mp4',
+            'ogg': 'audio/ogg'
+        }
+        return mime_types.get(extension, 'audio/wav')
 
     def _get_experiment_metrics(self, experiment: Dict[str, Any]) -> List[BaseMetric]:
         """Get metrics for a specific experiment"""
@@ -220,19 +247,11 @@ class ExperimentRunner:
         start_time = time.time()
         
         try:
-            # Download audio file
-            bucket, path = self.gcs_client.parse_gcs_uri(audio_file)
-            local_path = f"/tmp/{Path(path).name}"
-            self.gcs_client.download_file(path, local_path)
+            _, path = self.gcs_client.parse_gcs_uri(audio_file)
+            audio_data = self.gcs_client.download_bytes(path)
             
-            # Load audio data
-            audio_data = self.audio_loader.prepare_audio_for_api(local_path)
-            if not audio_data:
-                logger.error(f"Failed to load audio: {audio_file}")
-                return None
-            
-            # Get MIME type
-            mime_type = self.audio_loader.get_audio_metadata(local_path).get('mime_type', 'audio/wav')
+            # Get MIME type from file extension
+            mime_type = self._get_mime_type_from_path(path)
             
             # Generate response using Gemini
             generation_config = experiment['generation_config']
@@ -246,36 +265,37 @@ class ExperimentRunner:
             response_text = llm_response['response_text']
             response_metadata = llm_response['metadata']
             
-            # Compute metrics
+            # Compute metrics (skip batch metrics here, they'll be computed later)
             metric_scores = {}
             for metric in metrics:
                 if metric.is_applicable(experiment['use_case']):
+                    # Skip metrics that support batch evaluation - they'll be computed later
+                    if hasattr(metric, 'supports_batch_evaluation') and metric.supports_batch_evaluation():
+                        logger.debug(f"Skipping {metric.name} - will be computed in batch")
+                        continue
+                        
                     try:
                         scores = metric.compute(
                             response=response_text,
                             metadata=response_metadata,
-                            audio_path=local_path
                         )
                         metric_scores.update(scores)
                     except Exception as e:
                         logger.error(f"Error computing {metric.name}: {e}")
                         metric_scores[f"{metric.name}_error"] = 1.0
             
-            # Compile result
             result = {
                 'experiment_name': experiment['name'],
                 'model_id': experiment['model_id'],
                 'use_case': experiment['use_case'],
                 'audio_file': audio_file,
                 'response_text': response_text,
+                'metadata': response_metadata,  # Store metadata for batch evaluation
                 'processing_time': time.time() - start_time,
                 'timestamp': datetime.now().isoformat(),
                 **response_metadata,
                 **metric_scores
             }
-            
-            # Clean up local file
-            Path(local_path).unlink(missing_ok=True)
             
             return result
             
@@ -288,6 +308,48 @@ class ExperimentRunner:
                 'processing_time': time.time() - start_time,
                 'timestamp': datetime.now().isoformat()
             }
+
+    def _run_batch_evaluations(self, results_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Run batch evaluations for metrics that support it
+        
+        Args:
+            results_df: DataFrame with initial experiment results
+            
+        Returns:
+            DataFrame with additional evaluation metrics
+        """
+        if results_df.empty:
+            return results_df
+        
+        logger.info("Running batch evaluations for supported metrics")
+        
+        # Identify metrics that support batch evaluation
+        batch_metrics = {}
+        individual_metrics = {}
+        
+        for metric_name, metric in self.available_metrics.items():
+            if hasattr(metric, 'supports_batch_evaluation') and metric.supports_batch_evaluation():
+                batch_metrics[metric_name] = metric
+            else:
+                individual_metrics[metric_name] = metric
+        
+        logger.info(f"Found {len(batch_metrics)} batch metrics and {len(individual_metrics)} individual metrics")
+        
+        # Run batch metrics
+        for metric_name, metric in batch_metrics.items():
+            try:
+                logger.info(f"Running batch evaluation for: {metric_name}")
+                results_df = metric.batch_compute(results_df)
+            except Exception as e:
+                logger.error(f"Error in batch evaluation for {metric_name}: {e}")
+                # Add error column
+                results_df[f"{metric_name}_batch_error"] = 1.0
+        
+        # For individual metrics, we could run them here if they weren't already computed
+        # during the initial processing, but in our current flow they're already done
+        
+        return results_df
 
     def get_experiment_summary(self) -> Dict[str, Any]:
         """Get a summary of the current experiment run"""
@@ -308,7 +370,7 @@ class ExperimentRunner:
         }
         
         # Add metric summaries
-        metric_columns = [col for col in df.columns if col.startswith(('transcript_', 'safety_'))]
+        metric_columns = [col for col in df.columns if col.startswith(('transcript_', 'safety_', 'vertexai_'))]
         for metric_col in metric_columns:
             if df[metric_col].dtype in ['float64', 'int64']:
                 summary[f"{metric_col}_avg"] = df[metric_col].mean()

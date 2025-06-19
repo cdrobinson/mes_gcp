@@ -5,7 +5,8 @@ import time
 from typing import Dict, Any
 import google.genai as genai
 from google.genai import types
-from ..utils.retry import RetryableClient, retry_with_backoff
+
+from utils.retry import RetryableClient, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +61,7 @@ class GeminiClient(RetryableClient):
                     top_k=generation_config.get("top_k", 40),
                     top_p=generation_config.get("top_p", 0.8),
                     max_output_tokens=generation_config.get("max_output_tokens", 4096),
-                ),
-                # Safety settings can be added here if needed
+                )
             )
             audio_part = types.ContentPart(
                 inline_data=types.Blob(
