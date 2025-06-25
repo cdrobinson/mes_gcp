@@ -1,8 +1,6 @@
 """Retry utilities with exponential backoff"""
 
-import time
-from functools import wraps
-from typing import Callable, Any, Optional, Type, Union, Tuple
+from typing import Type, Tuple
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import logging
 
@@ -20,7 +18,6 @@ def retry_with_backoff(
     
     Args:
         max_attempts: Maximum number of retry attempts
-        backoff_factor: Multiplier for exponential backoff
         max_wait_time: Maximum wait time between retries
         retry_exceptions: Tuple of exception types that should trigger a retry
     """

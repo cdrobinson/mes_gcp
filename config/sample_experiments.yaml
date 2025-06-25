@@ -2,10 +2,19 @@ project: "gcp-project-id"
 location: "global"
 bucket: "mes-audio-bucket"
 
+write_to_bigquery: true
+
 vertexai:
   project_id: "gcp-project-id"
   location: "europe-west2"
   model_armour_template_id: "default"
+
+bigquery:
+  enabled: true
+  project_id: "gcp-project-id"
+  location: "europe-west2"
+  dataset_name: "llm_experiments"
+  table_name: "experiment_results"
 
 gcs_files:
   - "calls/claim_*.wav"

@@ -8,9 +8,9 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import yaml
 
-
 from clients.gcs_client import GCSClient
 from clients.gemini_client import GeminiClient
+from clients.bigquery_client import BigQueryClient
 from utils.audio_loader import AudioLoader
 from utils.prompt_manager import PromptManager
 from metrics.base_metric import BaseMetric
@@ -43,6 +43,12 @@ class ExperimentRunner:
 
         self.prompt_manager = PromptManager(project_id, location)
         
+        bigquery_config = self.config.get('bigquery', {})
+        self.bigquery_client = BigQueryClient(
+            project_id=bigquery_config.get('project_id', project_id),
+            location=bigquery_config.get('location', location)
+        )
+        
         self.available_metrics = {
             "transcript_quality": TranscriptQualityMetric(),
             "safety": SafetyMetric(
@@ -61,7 +67,7 @@ class ExperimentRunner:
         self.run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         logger.info(f"ExperimentRunner initialised with {len(self.available_metrics)} available metrics")
-    
+
     def _load_config(self) -> Dict[str, Any]:
         """Load and validate the YAML configuration"""
         try:
@@ -133,8 +139,54 @@ class ExperimentRunner:
         # Run batch evaluation for metrics that support it
         results_df = self._run_batch_evaluations(results_df, experiment_metrics)
         
+        if self.config.get('write_to_bigquery', False) and self.bigquery_client:
+            self._write_results_to_bigquery(results_df)
+        
         return results_df
-    
+
+    def _write_results_to_bigquery(self, results_df: pd.DataFrame) -> None:
+        """
+        Write experiment results to BigQuery
+        
+        Args:
+            results_df: DataFrame containing experiment results
+        """
+        try:
+            bigquery_config = self.config.get('bigquery', {})
+            dataset_name = bigquery_config.get('dataset_name', 'llm_experiments')
+            table_name = bigquery_config.get('table_name', 'experiment_results')
+            
+            logger.info(f"Writing {len(results_df)} results to BigQuery: {dataset_name}.{table_name}")
+            
+            # Ensure dataset exists
+            self.bigquery_client.create_dataset(dataset_name, exists_ok=True)
+            
+            # Prepare data for BigQuery
+            # Convert datetime columns to strings and handle complex data types
+            df_copy = results_df.copy()
+            
+            # Convert timestamp column if exists
+            if 'timestamp' in df_copy.columns:
+                df_copy['timestamp'] = pd.to_datetime(df_copy['timestamp'])
+            
+            # Convert metadata column to JSON string if it exists
+            if 'metadata' in df_copy.columns:
+                df_copy['metadata'] = df_copy['metadata'].astype(str)
+            
+            self.bigquery_client.insert_rows_from_dataframe(
+                dataset_name=dataset_name,
+                table_name=table_name,
+                df=df_copy,
+                ignore_unknown_values=True,
+                skip_invalid_rows=False
+            )
+            
+            logger.info(f"Successfully wrote {len(df_copy)} rows to BigQuery")
+            
+        except Exception as e:
+            logger.error(f"Error writing results to BigQuery: {e}")
+            raise
+
     def _get_audio_files(self) -> List[str]:
         """Get list of audio files from GCS"""
         try:
