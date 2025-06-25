@@ -6,7 +6,7 @@ from vertexai.preview.prompts import Prompt
 
 class PromptManager:
     """
-    Manages Vertex AI PrompetTemplate lifecycle:
+    Manages Vertex AI PromptTemplate lifecycle:
       - initialise with project & location
       - create, load, update prompt versions
     """

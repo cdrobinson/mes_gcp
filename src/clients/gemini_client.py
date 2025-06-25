@@ -172,7 +172,6 @@ class GeminiClient(RetryableClient):
         try:
             if hasattr(response, 'usage_metadata') and response.usage_metadata:
                 usage = response.usage_metadata
-                metadata["usage_metadata"] = usage
                 metadata["input_tokens"] = getattr(usage, 'prompt_token_count', None)
                 metadata["output_tokens"] = getattr(usage, 'candidates_token_count', None)
                 metadata["total_tokens"] = getattr(usage, 'total_token_count', None)

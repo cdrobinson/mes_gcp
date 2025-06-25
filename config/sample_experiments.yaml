@@ -1,10 +1,10 @@
-project: "acme-insurance-llm"
-location: "us-central1"
+project: "gcp-project-id"
+location: "global"
 bucket: "mes-audio-bucket"
 
 vertexai:
-  project_id: "acme-insurance-llm"
-  location: "us-central1"
+  project_id: "gcp-project-id"
+  location: "europe-west2"
   model_armour_template_id: "default"
 
 gcs_files:
