@@ -17,7 +17,7 @@ class VertexAIEvaluationMetric(BaseMetric):
 
     def __init__(self, project_id: str, location: str = "us-central1"):
         """
-        Initialize VertexAI Evaluation metric.
+        Initialise VertexAI Evaluation metric.
 
         Args:
             project_id: GCP project ID
@@ -33,7 +33,7 @@ class VertexAIEvaluationMetric(BaseMetric):
         self.hallucination_metric = self._create_hallucination_metric()
         self.bias_metric = self._create_bias_metric()
         
-        logger.info("Initialized VertexAI Evaluation metric.")
+        logger.info("Initialised VertexAI Evaluation metric.")
 
     def supports_batch_evaluation(self) -> bool:
         """Indicate that this metric supports batch evaluation"""
@@ -106,7 +106,7 @@ class VertexAIEvaluationMetric(BaseMetric):
             # Merge results back
             results_with_eval = results_df.copy()
             
-            # Initialize evaluation columns with default values
+            # Initialise evaluation columns with default values
             for col in self._get_evaluation_column_names():
                 results_with_eval[col] = 0.0
             
@@ -183,29 +183,24 @@ class VertexAIEvaluationMetric(BaseMetric):
             
             eval_result = eval_task.evaluate()
             
-            # Extract individual scores for each row
             scores = {}
             
             # Get row-level results
             if hasattr(eval_result, 'results_df'):
                 results_df = eval_result.results_df
                 
-                # Extract hallucination scores
                 if 'hallucination_rate' in results_df.columns:
                     scores['vertexai_hallucination_rate'] = results_df['hallucination_rate'].tolist()
                     scores['vertexai_hallucination_flagged'] = [1.0 if x > 5.0 else 0.0 for x in results_df['hallucination_rate']]
                 
-                # Extract bias scores
                 if 'bias_assessment' in results_df.columns:
                     scores['vertexai_bias_assessment'] = results_df['bias_assessment'].tolist()
                     scores['vertexai_bias_flagged'] = [1.0 if x > 5.0 else 0.0 for x in results_df['bias_assessment']]
             
-            # Fallback to summary metrics if row-level not available
             if not scores and hasattr(eval_result, 'summary_metrics'):
                 summary_metrics = eval_result.summary_metrics
                 num_rows = len(eval_data)
                 
-                # Use mean values for all rows (not ideal but fallback)
                 if 'hallucination_rate/mean' in summary_metrics:
                     mean_val = summary_metrics['hallucination_rate/mean']
                     scores['vertexai_hallucination_rate'] = [mean_val] * num_rows
@@ -239,7 +234,6 @@ class VertexAIEvaluationMetric(BaseMetric):
         """Legacy method for single evaluation - kept for compatibility"""
         batch_scores = self._run_batch_evaluation(eval_data)
         
-        # Return first values for single evaluation
         scores = {}
         for key, values in batch_scores.items():
             if values and metric_name in key:

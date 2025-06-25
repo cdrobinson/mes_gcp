@@ -17,17 +17,13 @@ class TranscriptQualityMetric(BaseMetric):
     
     def compute(self, 
                 response: str, 
-                metadata: Dict[str, Any], 
-                reference: Optional[str] = None,
-                audio_path: Optional[str] = None) -> Dict[str, float]:
+                metadata: Dict[str, Any]) -> Dict[str, float]:
         """
         Compute transcript quality metrics
         
         Args:
             response: The LLM transcription response
             metadata: Response metadata including log probabilities
-            reference: Reference transcript (if available)
-            audio_path: Audio path (not used for this metric)
             
         Returns:
             Dictionary of quality scores
@@ -45,23 +41,14 @@ class TranscriptQualityMetric(BaseMetric):
             scores["transcript_confidence"] = confidence
         
         # Token count metrics
-        token_count = metadata.get("total_tokens", 0)
+        token_count = metadata.get("total_tokens") or 0
         if token_count > 0:
             scores["transcript_token_count"] = token_count
-            
-            # Words per token ratio (estimate)
-            word_count = len(response.split()) if response else 0
-            if word_count > 0:
-                scores["transcript_words_per_token"] = word_count / token_count
+
         
         # Text format validation for transcription
         format_scores = self._validate_transcript_format(response)
         scores.update(format_scores)
-        
-        # If reference transcript is available, compute comparison metrics
-        if reference:
-            comparison_scores = self._compare_with_reference(response, reference)
-            scores.update(comparison_scores)
         
         # Basic text quality metrics
         quality_scores = self._compute_text_quality(response)
@@ -153,43 +140,7 @@ class TranscriptQualityMetric(BaseMetric):
         scores["transcript_has_both_speakers"] = 1.0 if (has_call_agent and has_customer) else 0.0
         
         return scores
-    
-    def _compare_with_reference(self, response: str, reference: str) -> Dict[str, float]:
-        """
-        Compare transcript with reference using simple metrics
         
-        Args:
-            response: Generated transcript
-            reference: Reference transcript
-            
-        Returns:
-            Dictionary of comparison scores
-        """
-        scores = {}
-        
-        # Basic text similarity
-        response_words = set(response.lower().split())
-        reference_words = set(reference.lower().split())
-        
-        if reference_words:
-            # Word overlap
-            overlap = len(response_words.intersection(reference_words))
-            scores["transcript_word_overlap"] = overlap / len(reference_words)
-            
-            # Length ratio
-            scores["transcript_length_ratio"] = len(response.split()) / len(reference.split())
-        
-        # Character-level similarity (simple)
-        response_clean = ''.join(response.lower().split())
-        reference_clean = ''.join(reference.lower().split())
-        
-        if reference_clean:
-            # Simple character overlap
-            common_chars = sum(1 for c in response_clean if c in reference_clean)
-            scores["transcript_char_similarity"] = common_chars / len(reference_clean)
-        
-        return scores
-    
     def _compute_text_quality(self, response: str) -> Dict[str, float]:
         """
         Compute basic text quality metrics

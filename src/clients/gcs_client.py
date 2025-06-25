@@ -15,42 +15,20 @@ logger = logging.getLogger(__name__)
 class GCSClient(RetryableClient):
     """Client for interacting with Google Cloud Storage"""
     
-    def __init__(self, bucket_name: str, project_id: Optional[str] = None, **retry_kwargs):
+    def __init__(self, bucket_name: str, **retry_kwargs):
         """
         Initialize GCS client
         
         Args:
             bucket_name: Name of the GCS bucket
-            project_id: GCP project ID (optional, can be inferred from environment)
             **retry_kwargs: Additional arguments for retry configuration
         """
         super().__init__(**retry_kwargs)
         self.bucket_name = bucket_name
-        self.project_id = project_id
-        
-        # Initialize the storage client
-        if project_id:
-            self.client = storage.Client(project=project_id)
-        else:
-            self.client = storage.Client()
+
+        self.client = storage.Client()
         
         self.bucket = self.client.bucket(bucket_name)
-        
-        self._verify_bucket_access()
-    
-    def _verify_bucket_access(self):
-        """Verify that we can access the bucket"""
-        try:
-            # Try to get bucket metadata
-            self.bucket.reload()
-            logger.info(f"Successfully connected to GCS bucket: {self.bucket_name}")
-        except NotFound:
-            raise ValueError(f"Bucket {self.bucket_name} not found")
-        except Forbidden:
-            raise ValueError(f"Access denied to bucket {self.bucket_name}")
-        except Exception as e:
-            logger.error(f"Error connecting to GCS bucket {self.bucket_name}: {e}")
-            raise
     
     @retry_with_backoff(max_attempts=3)
     def list_audio_files(self, patterns: List[str]) -> List[str]:

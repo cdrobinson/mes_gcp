@@ -14,7 +14,7 @@ class SafetyMetric(BaseMetric):
 
     def __init__(self, project_id: str, location: str = "us-central1", template_id: str = "default"):
         """
-        Initialize Safety metric with Model Armour.
+        Initialise Safety metric with Model Armour.
 
         Args:
             project_id: GCP project ID
@@ -24,7 +24,7 @@ class SafetyMetric(BaseMetric):
         super().__init__("safety", "all")
         self.client = VertexAIClient(project_id=project_id, location=location)
         self.template_id = template_id
-        logger.info(f"Initialized SafetyMetric using Model Armour template: {template_id}")
+        logger.info(f"Initialised SafetyMetric using Model Armour template: {template_id}")
 
     def compute(self,
                 response: str,
@@ -44,12 +44,12 @@ class SafetyMetric(BaseMetric):
             return {"safety_no_content": 1.0}
 
         try:
-            sanitization_result = self.client.sanitize_model_response(
+            sanitisation_result = self.client.sanitise_model_response(
                 response_text=response,
                 template_id=self.template_id
             )
             
-            scores = self._parse_sanitization_result(sanitization_result)
+            scores = self._parse_sanitisation_result(sanitisation_result)
             
             return scores
 
@@ -57,18 +57,18 @@ class SafetyMetric(BaseMetric):
             logger.error(f"Error computing safety metrics with Model Armour: {e}")
             return {"safety_computation_error": 1.0}
 
-    def _parse_sanitization_result(self, result: Dict[str, Any]) -> Dict[str, float]:
-        """Parse Model Armour sanitization result into metric scores"""
+    def _parse_sanitisation_result(self, result: Dict[str, Any]) -> Dict[str, float]:
+        """Parse Model Armour sanitisation result into metric scores"""
         scores = {}
         
         try:
-            sanitization_result = result.get("sanitizationResult", {})
-            filter_match_state = sanitization_result.get("filterMatchState", "NO_MATCH_FOUND")
+            sanitisation_result = result.get("sanitizationResult", {})
+            filter_match_state = sanitisation_result.get("filterMatchState", "NO_MATCH_FOUND")
             
             scores["safety_overall_flagged"] = 1.0 if filter_match_state == "MATCH_FOUND" else 0.0
-            scores["safety_invocation_success"] = 1.0 if sanitization_result.get("invocationResult") == "SUCCESS" else 0.0
+            scores["safety_invocation_success"] = 1.0 if sanitisation_result.get("invocationResult") == "SUCCESS" else 0.0
             
-            filter_results = sanitization_result.get("filterResults", [])
+            filter_results = sanitisation_result.get("filterResults", [])
             
             for i, filter_result in enumerate(filter_results):
                 # Handle CSAM filter results
@@ -105,7 +105,7 @@ class SafetyMetric(BaseMetric):
             return scores
             
         except Exception as e:
-            logger.error(f"Error parsing sanitization result: {e}")
+            logger.error(f"Error parsing sanitisation result: {e}")
             return {"safety_parsing_error": 1.0}
 
     def get_description(self) -> str:

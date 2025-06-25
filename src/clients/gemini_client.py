@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 class GeminiClient(RetryableClient):
     """Client for interacting with Gemini models"""
 
-    def __init__(self, model_id: str = "gemini-1.5-pro", config: Dict[str, str] = None, **retry_kwargs):
+    def __init__(self, model_id: str, config: Dict[str, str] = None, **retry_kwargs):
         """
-        Initialize Gemini client
+        Initialise Gemini client
 
         Args:
             model_id: The Gemini model to use
@@ -32,7 +32,7 @@ class GeminiClient(RetryableClient):
             project=config["project_id"],
             location=config["location"]
         )
-        logger.info(f"Initialized Gemini client with model: {model_id}")
+        logger.info(f"Initialised Gemini client with model: {model_id}")
 
     @retry_with_backoff(max_attempts=3)
     def generate_from_audio(self,
@@ -55,28 +55,27 @@ class GeminiClient(RetryableClient):
         start_time = time.time()
         try:
             gen_config = types.GenerateContentConfig(
-                model=self.model_id,
-                generation_config=types.GenerationConfig(
-                    temperature=generation_config.get("temperature", 0.2),
-                    top_k=generation_config.get("top_k", 40),
-                    top_p=generation_config.get("top_p", 0.8),
-                    max_output_tokens=generation_config.get("max_output_tokens", 4096),
+                temperature=generation_config.get("temperature", 0.2),
+                top_k=generation_config.get("top_k", 40),
+                top_p=generation_config.get("top_p", 0.8),
+                max_output_tokens=generation_config.get("max_output_tokens", 4096),
                 )
-            )
-            audio_part = types.ContentPart(
-                inline_data=types.Blob(
+
+            audio_part = types.Part.from_bytes(
                     data=audio_data,
                     mime_type=mime_type
                 )
-            )
+
             content = [
-                types.ContentPart(text=prompt),
+                prompt,
                 audio_part
             ]
-            response = self.client.generate_content(
+            response = self.client.models.generate_content(
+                model=self.model_id,
                 contents=content,
                 config=gen_config
             )
+
             end_time = time.time()
             response_text = response.text if response.text else ""
             metadata = self._extract_response_metadata(response, start_time, end_time)
@@ -117,19 +116,19 @@ class GeminiClient(RetryableClient):
         start_time = time.time()
         try:
             gen_config = types.GenerateContentConfig(
-                model=self.model_id,
-                generation_config=types.GenerationConfig(
-                    temperature=generation_config.get("temperature", 0.2),
-                    top_k=generation_config.get("top_k", 40),
-                    top_p=generation_config.get("top_p", 0.8),
-                    max_output_tokens=generation_config.get("max_output_tokens", 4096),
-                ),
+                temperature=generation_config.get("temperature", 0.2),
+                top_k=generation_config.get("top_k", 40),
+                top_p=generation_config.get("top_p", 0.8),
+                max_output_tokens=generation_config.get("max_output_tokens", 4096),
             )
-            content = [types.ContentPart(text=prompt)]
-            response = self.client.generate_content(
+
+            content = [prompt]
+            response = self.client.models.generate_content(
+                model=self.model_id,
                 contents=content,
                 config=gen_config
             )
+
             end_time = time.time()
             response_text = response.text if response.text else ""
             metadata = self._extract_response_metadata(response, start_time, end_time)
@@ -174,22 +173,12 @@ class GeminiClient(RetryableClient):
             if hasattr(response, 'usage_metadata') and response.usage_metadata:
                 usage = response.usage_metadata
                 metadata["usage_metadata"] = usage
-                metadata["input_tokens"] = getattr(usage, 'input_tokens', None)
-                metadata["output_tokens"] = getattr(usage, 'output_tokens', None)
-                metadata["total_tokens"] = getattr(usage, 'total_tokens', None)
+                metadata["input_tokens"] = getattr(usage, 'prompt_token_count', None)
+                metadata["output_tokens"] = getattr(usage, 'candidates_token_count', None)
+                metadata["total_tokens"] = getattr(usage, 'total_token_count', None)
             if hasattr(response, 'candidates') and response.candidates:
                 candidate = response.candidates[0]
                 metadata["avg_logprobs"] = getattr(candidate, 'avg_logprobs', None)
-                
-                # Extract safety ratings if available
-                if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
-                    safety_ratings = []
-                    for rating in candidate.safety_ratings:
-                        safety_ratings.append({
-                            "category": getattr(rating, 'category', 'unknown'),
-                            "probability": getattr(rating, 'probability', 'UNKNOWN')
-                        })
-                    metadata["safety_ratings"] = safety_ratings
         except Exception as e:
             logger.warning(f"Error extracting response metadata: {e}")
             metadata["metadata_extraction_error"] = str(e)

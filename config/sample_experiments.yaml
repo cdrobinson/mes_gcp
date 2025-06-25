@@ -11,20 +11,6 @@ gcs_files:
   - "calls/claim_*.wav"
   - "calls/followup_*.wav"
 
-prompts:
-  transcription:
-    prompt-v1: |
-      ROLE: Insurance call transcription assistant
-      TASK: Produce a fully timestamped transcript (MM:SS SPEAKER: TEXT) from an audio file.
-      FORMAT RULES:
-        • Every line MUST start with increasing MM:SS.
-        • Use exactly two speaker labels: Call_Agent, Customer.
-        • Start a new line on speaker change or >1.0 s pause.
-        • No headers, footers, or extra commentary.
-        • For overlapping speech, write dominant speaker first, then the overlap on the next timestamp.
-        • Identify which voice belongs to which speaker.
-      RETURN: Plain-text transcript only.
-
 experiments:
   - name: "transcription_baseline"
     use_case: "transcription"

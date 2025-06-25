@@ -108,29 +108,3 @@ class BaseMetric(ABC):
             return results_df
         else:
             raise NotImplementedError("Batch evaluation not implemented for this metric")
-
-class CompositeMetric(BaseMetric):
-    """A metric that combines multiple sub-metrics"""
-    
-    def __init__(self, name: str, use_case: str, sub_metrics: List[BaseMetric]):
-        super().__init__(name, use_case)
-        self.sub_metrics = sub_metrics
-    
-    def compute(self, 
-                response: str, 
-                metadata: Dict[str, Any], 
-                reference: Optional[str] = None,
-                audio_path: Optional[str] = None) -> Dict[str, float]:
-        """Compute all sub-metrics and return combined results"""
-        results = {}
-        
-        for metric in self.sub_metrics:
-            if metric.is_applicable(self.use_case):
-                metric_results = metric.compute(response, metadata, reference, audio_path)
-                results.update(metric_results)
-        
-        return results
-    
-    def get_description(self) -> str:
-        descriptions = [metric.get_description() for metric in self.sub_metrics]
-        return f"Composite metric combining: {'; '.join(descriptions)}"

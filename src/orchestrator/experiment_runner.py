@@ -1,4 +1,4 @@
-"""Simplified experiment orchestrator for transcription LLM evaluations"""
+"""Experiment orchestrator for LLM evaluations"""
 
 import logging
 import time
@@ -12,6 +12,7 @@ import yaml
 from clients.gcs_client import GCSClient
 from clients.gemini_client import GeminiClient
 from utils.audio_loader import AudioLoader
+from utils.prompt_manager import PromptManager
 from metrics.base_metric import BaseMetric
 from metrics.transcription.transcript_quality import TranscriptQualityMetric
 from metrics.safety.safety import SafetyMetric
@@ -21,11 +22,11 @@ logger = logging.getLogger(__name__)
 
 
 class ExperimentRunner:
-    """Simplified orchestrator for transcription LLM evaluation experiments"""
+    """Orchestrator for LLM evaluation experiments"""
     
     def __init__(self, config_path: str):
         """
-        Initialize the experiment runner
+        Initialise the experiment runner
         
         Args:
             config_path: Path to the YAML configuration file
@@ -36,10 +37,11 @@ class ExperimentRunner:
         self.gcs_client = self._init_gcs_client()
         self.audio_loader = AudioLoader()
         
-        # Initialize metrics with config
         vertexai_config = self.config.get('vertexai', {})
         project_id = vertexai_config.get('project_id', self.config['project'])
         location = vertexai_config.get('location', self.config['location'])
+
+        self.prompt_manager = PromptManager(project_id, location)
         
         self.available_metrics = {
             "transcript_quality": TranscriptQualityMetric(),
@@ -58,7 +60,7 @@ class ExperimentRunner:
         self.results = []
         self.run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        logger.info(f"ExperimentRunner initialized with {len(self.available_metrics)} available metrics")
+        logger.info(f"ExperimentRunner initialised with {len(self.available_metrics)} available metrics")
     
     def _load_config(self) -> Dict[str, Any]:
         """Load and validate the YAML configuration"""
@@ -80,14 +82,13 @@ class ExperimentRunner:
             raise
     
     def _init_gcs_client(self) -> GCSClient:
-        """Initialize Google Cloud Storage client"""
+        """Initialise Google Cloud Storage client"""
         try:
             return GCSClient(
-                bucket_name=self.config['bucket'],
-                project_id=self.config['project']
+                bucket_name=self.config['bucket']
             )
         except Exception as e:
-            logger.error(f"Error initializing GCS client: {e}")
+            logger.error(f"Error initialising GCS client: {e}")
             raise
 
     def run_experiments(self, experiment_names: Optional[List[str]] = None) -> pd.DataFrame:
@@ -109,12 +110,17 @@ class ExperimentRunner:
             ]
         
         logger.info(f"Running {len(experiments_to_run)} experiments")
+
+        experiment_metrics = {
+            metric_name
+            for exp in experiments_to_run
+            for metric_name in exp.get('metrics', [])
+        }
         
         # Get audio files
         audio_files = self._get_audio_files()
         logger.info(f"Processing {len(audio_files)} audio files")
         
-        # Run experiments and collect all results
         for experiment in experiments_to_run:
             self._run_single_experiment(experiment, audio_files)
         
@@ -122,11 +128,10 @@ class ExperimentRunner:
             logger.warning("No results to process")
             return pd.DataFrame()
         
-        # Convert results to DataFrame
         results_df = pd.DataFrame(self.results)
         
         # Run batch evaluation for metrics that support it
-        results_df = self._run_batch_evaluations(results_df)
+        results_df = self._run_batch_evaluations(results_df, experiment_metrics)
         
         return results_df
     
@@ -139,7 +144,7 @@ class ExperimentRunner:
             # Validate audio files
             valid_files = []
             for file_uri in audio_files:
-                bucket, path = self.gcs_client.parse_gcs_uri(file_uri)
+                _, path = self.gcs_client.parse_gcs_uri(file_uri)
                 metadata = self.gcs_client.get_file_metadata(path)
                 
                 if 'error' not in metadata:
@@ -206,9 +211,7 @@ class ExperimentRunner:
         mime_types = {
             'wav': 'audio/wav',
             'mp3': 'audio/mpeg',
-            'flac': 'audio/flac',
-            'm4a': 'audio/mp4',
-            'ogg': 'audio/ogg'
+            'm4a': 'audio/mp4'
         }
         return mime_types.get(extension, 'audio/wav')
 
@@ -227,15 +230,13 @@ class ExperimentRunner:
         return experiment_metrics
 
     def _get_prompt(self, experiment: Dict[str, Any]) -> str:
-        """Get the prompt template for an experiment"""
-        use_case = experiment['use_case']
+        """Retrieve the prompt text for an experiment via Vertex AI Prompt Management service"""
         prompt_id = experiment['prompt_id']
-        
-        prompts = self.config.get('prompts', {})
-        if use_case in prompts and prompt_id in prompts[use_case]:
-            return prompts[use_case][prompt_id]
-        else:
-            raise ValueError(f"Prompt not found: {use_case}/{prompt_id}")
+
+        try:
+            return self.prompt_manager.load(prompt_id)
+        except Exception as e:
+            raise ValueError(f"Could not load prompt '{prompt_id}': {e}")
 
     def _process_single_audio(self, 
                             experiment: Dict[str, Any],
@@ -291,9 +292,11 @@ class ExperimentRunner:
                 'audio_file': audio_file,
                 'response_text': response_text,
                 'metadata': response_metadata,  # Store metadata for batch evaluation
+                'input_tokens': response_metadata['input_tokens'],
+                'output_tokens': response_metadata['output_tokens'],
+                'total_tokens': response_metadata['total_tokens'],
                 'processing_time': time.time() - start_time,
                 'timestamp': datetime.now().isoformat(),
-                **response_metadata,
                 **metric_scores
             }
             
@@ -309,7 +312,7 @@ class ExperimentRunner:
                 'timestamp': datetime.now().isoformat()
             }
 
-    def _run_batch_evaluations(self, results_df: pd.DataFrame) -> pd.DataFrame:
+    def _run_batch_evaluations(self, results_df: pd.DataFrame, experiment_metrics) -> pd.DataFrame:
         """
         Run batch evaluations for metrics that support it
         
@@ -329,6 +332,8 @@ class ExperimentRunner:
         individual_metrics = {}
         
         for metric_name, metric in self.available_metrics.items():
+            if metric_name not in experiment_metrics:
+                continue
             if hasattr(metric, 'supports_batch_evaluation') and metric.supports_batch_evaluation():
                 batch_metrics[metric_name] = metric
             else:
@@ -336,7 +341,6 @@ class ExperimentRunner:
         
         logger.info(f"Found {len(batch_metrics)} batch metrics and {len(individual_metrics)} individual metrics")
         
-        # Run batch metrics
         for metric_name, metric in batch_metrics.items():
             try:
                 logger.info(f"Running batch evaluation for: {metric_name}")
@@ -345,9 +349,6 @@ class ExperimentRunner:
                 logger.error(f"Error in batch evaluation for {metric_name}: {e}")
                 # Add error column
                 results_df[f"{metric_name}_batch_error"] = 1.0
-        
-        # For individual metrics, we could run them here if they weren't already computed
-        # during the initial processing, but in our current flow they're already done
         
         return results_df
 
