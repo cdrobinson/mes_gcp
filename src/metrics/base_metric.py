@@ -10,7 +10,7 @@ class BaseMetric(ABC):
     
     def __init__(self, name: str, use_case: str):
         """
-        Initialize the metric
+        Initialise the metric
         
         Args:
             name: Name of the metric

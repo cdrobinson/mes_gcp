@@ -12,7 +12,7 @@ class TranscriptQualityMetric(BaseMetric):
     """Metric for evaluating transcript quality using native LLM metrics"""
     
     def __init__(self):
-        """Initialize Transcript Quality metric"""
+        """Initialise Transcript Quality metric"""
         super().__init__("transcript_quality", "transcription")
     
     def compute(self, 

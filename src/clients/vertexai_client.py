@@ -16,7 +16,7 @@ class VertexAIClient(RetryableClient):
 
     def __init__(self, project_id: str, location: str = "europe-west2", **retry_kwargs):
         """
-        Initialize VertexAI client
+        Initialise VertexAI client
         
         Args:
             project_id: GCP project ID
@@ -31,7 +31,7 @@ class VertexAIClient(RetryableClient):
         
         self.model_armour_base_url = f"https://modelarmor.{location}.rep.googleapis.com/v1"
         
-        logger.info(f"Initialized VertexAI client for project: {project_id}, location: {location}")
+        logger.info(f"Initialised VertexAI client for project: {project_id}, location: {location}")
 
     def _get_access_token(self) -> str:
         """Get fresh access token"""
@@ -42,14 +42,14 @@ class VertexAIClient(RetryableClient):
     @retry_with_backoff(max_attempts=3)
     def sanitise_model_response(self, response_text: str, template_id: str) -> Dict[str, Any]:
         """
-        Sanitize model response using Model Armour
+        Sanitise model response using Model Armour
         
         Args:
             response_text: The model response to sanitize
             template_id: Model Armour template ID
             
         Returns:
-            Dictionary containing sanitization results
+            Dictionary containing sanitisation results
         """
         try:
             url = f"{self.model_armour_base_url}/projects/{self.project_id}/locations/{self.location}/templates/{template_id}:sanitizeModelResponse"
@@ -74,5 +74,5 @@ class VertexAIClient(RetryableClient):
             return result
             
         except Exception as e:
-            logger.error(f"Error sanitizing model response: {e}")
+            logger.error(f"Error sanitising model response: {e}")
             raise
