@@ -11,7 +11,6 @@ import yaml
 from clients.gcs_client import GCSClient
 from clients.gemini_client import GeminiClient
 from clients.bigquery_client import BigQueryClient
-from utils.audio_loader import AudioLoader
 from utils.prompt_manager import PromptManager
 from metrics.base_metric import BaseMetric
 from metrics.transcription.transcript_quality import TranscriptQualityMetric
@@ -35,7 +34,6 @@ class ExperimentRunner:
         self.config = self._load_config()
         
         self.gcs_client = self._init_gcs_client()
-        self.audio_loader = AudioLoader()
         
         vertexai_config = self.config.get('vertexai', {})
         project_id = vertexai_config.get('project_id', self.config['project'])

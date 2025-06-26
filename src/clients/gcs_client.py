@@ -17,7 +17,7 @@ class GCSClient(RetryableClient):
     
     def __init__(self, bucket_name: str, **retry_kwargs):
         """
-        Initialize GCS client
+        Initialise GCS client
         
         Args:
             bucket_name: Name of the GCS bucket

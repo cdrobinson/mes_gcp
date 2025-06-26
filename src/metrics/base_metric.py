@@ -1,7 +1,7 @@
 """Base metric class for all evaluation metrics"""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 import pandas as pd
 
 
@@ -47,29 +47,6 @@ class BaseMetric(ABC):
     def is_applicable(self, use_case: str) -> bool:
         """Check if this metric is applicable to the given use case"""
         return self.use_case == use_case or self.use_case == "all"
-    
-    def get_aggregated_score(self, scores: List[float]) -> Dict[str, float]:
-        """
-        Compute aggregated statistics for a list of scores
-        
-        Args:
-            scores: List of individual scores
-            
-        Returns:
-            Dictionary with mean, std, min, max, etc.
-        """
-        if not scores:
-            return {}
-        
-        import numpy as np
-        
-        return {
-            f"{self.name}_mean": np.mean(scores),
-            f"{self.name}_std": np.std(scores),
-            f"{self.name}_min": np.min(scores),
-            f"{self.name}_max": np.max(scores),
-            f"{self.name}_median": np.median(scores)
-        }
     
     def supports_batch_evaluation(self) -> bool:
         """Check if this metric supports batch evaluation"""

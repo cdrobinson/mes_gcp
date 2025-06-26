@@ -2,10 +2,10 @@
 
 import logging
 import pandas as pd
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 import vertexai
-from vertexai.preview.evaluation import EvalTask, PointwiseMetric, PointwiseMetricPromptTemplate
+from vertexai.preview.evaluation import EvalTask, PointwiseMetric, PointwiseMetricPromptTemplate, MetricPromptTemplateExamples
 
 from metrics.base_metric import BaseMetric
 
@@ -39,9 +39,7 @@ class VertexAIEvaluationMetric(BaseMetric):
         """Indicate that this metric supports batch evaluation"""
         return True
 
-    def compute(self,
-                response: str,
-                metadata: Dict[str, Any]) -> Dict[str, float]:
+    def compute(self, response: str) -> Dict[str, float]:
         """
         Compute LLM-as-a-judge metrics for a single response.
         
@@ -174,7 +172,6 @@ class VertexAIEvaluationMetric(BaseMetric):
     def _run_batch_evaluation(self, eval_data: pd.DataFrame) -> Dict[str, list]:
         """Run batch evaluation for all metrics"""
         try:
-            # Run evaluation with both metrics
             eval_task = EvalTask(
                 dataset=eval_data,
                 metrics=[self.hallucination_metric, self.bias_metric],
@@ -182,7 +179,7 @@ class VertexAIEvaluationMetric(BaseMetric):
             )
             
             eval_result = eval_task.evaluate()
-            
+            MetricPromptTemplateExamples.Pointwise.GROUNDEDNESS
             scores = {}
             
             # Get row-level results

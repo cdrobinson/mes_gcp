@@ -97,10 +97,6 @@ class SafetyMetric(BaseMetric):
                         deidentify_result = sdp_result["deidentifyResult"]
                         match_state = deidentify_result.get("matchState", "NO_MATCH_FOUND")
                         scores["safety_deidentify_flagged"] = 1.0 if match_state == "MATCH_FOUND" else 0.0
-                        
-                        # Track transformed bytes
-                        transformed_bytes = deidentify_result.get("transformedBytes", "0")
-                        scores["safety_transformed_bytes"] = float(transformed_bytes)
             
             return scores
             
