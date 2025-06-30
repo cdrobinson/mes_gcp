@@ -7,11 +7,12 @@ import google.genai as genai
 from google.genai import types
 
 from utils.retry import RetryableClient, retry_with_backoff
+from clients.base_client import BaseLLMClient
 
 logger = logging.getLogger(__name__)
 
 
-class GeminiClient(RetryableClient):
+class GeminiClient(BaseLLMClient, RetryableClient):
     """Client for interacting with Gemini models"""
 
     def __init__(self, model_id: str, config: Dict[str, str] = None, **retry_kwargs):

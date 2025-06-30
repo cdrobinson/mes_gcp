@@ -8,8 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import yaml
 
+from clients import GeminiClient, BaseLLMClient
 from clients.gcs_client import GCSClient
-from clients.gemini_client import GeminiClient
 from clients.bigquery_client import BigQueryClient
 from utils.prompt_manager import PromptManager
 from metrics.base_metric import BaseMetric
@@ -65,6 +65,26 @@ class ExperimentRunner:
         self.run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         logger.info(f"ExperimentRunner initialised with {len(self.available_metrics)} available metrics")
+
+    def _init_llm_client(self, client_config: Dict[str, Any]) -> BaseLLMClient:
+        """Initialise LLM client based on config"""
+        client_name = client_config.get('name')
+        model_id = client_config.get('model_id')
+        
+        if not client_name:
+            raise ValueError("LLM client name not specified in experiment config")
+
+        if client_name == 'gemini':
+            return GeminiClient(
+                model_id=model_id,
+                config={'project_id': self.config['project'], 'location': self.config['location']},
+                max_attempts=self.config.get('retry', {}).get('max_attempts', 3)
+            )
+        # Example for a future ModelGardenClient
+        # if client_name == 'model_garden':
+        #     return ModelGardenClient(endpoint_id=client_config.get('endpoint_id'))
+        
+        raise ValueError(f"Unknown LLM client: {client_name}")
 
     def _load_config(self) -> Dict[str, Any]:
         """Load and validate the YAML configuration"""
@@ -213,11 +233,7 @@ class ExperimentRunner:
         experiment_name = experiment['name']
         logger.info(f"Starting experiment: {experiment_name}")
         
-        gemini_client = GeminiClient(
-            model_id=experiment['model_id'],
-            config={'project_id': self.config['project'], 'location': self.config['location']},
-            max_attempts=self.config.get('retry', {}).get('max_attempts', 3)
-        )
+        llm_client = self._init_llm_client(experiment['client'])
         
         experiment_metrics = self._get_experiment_metrics(experiment)
         
@@ -239,7 +255,7 @@ class ExperimentRunner:
                 for audio_file in batch_files:
                     future = executor.submit(
                         self._process_single_audio,
-                        experiment, gemini_client, experiment_metrics,
+                        experiment, llm_client, experiment_metrics,
                         audio_file, prompt
                     )
                     futures.append((future, audio_file))
@@ -290,7 +306,7 @@ class ExperimentRunner:
 
     def _process_single_audio(self, 
                             experiment: Dict[str, Any],
-                            gemini_client: GeminiClient,
+                            llm_client: BaseLLMClient,
                             metrics: List[BaseMetric],
                             audio_file: str,
                             prompt: str) -> Optional[Dict[str, Any]]:
@@ -300,21 +316,20 @@ class ExperimentRunner:
         try:
             _, path = self.gcs_client.parse_gcs_uri(audio_file)
             audio_data = self.gcs_client.download_bytes(path)
-            
-            # Get MIME type from file extension
+
             mime_type = self._get_mime_type_from_path(path)
+
+            generation_config = experiment.get('generation_config', {})
             
-            # Generate response using Gemini
-            generation_config = experiment['generation_config']
-            llm_response = gemini_client.generate_from_audio(
+            response_data = llm_client.generate_from_audio(
                 audio_data=audio_data,
                 prompt=prompt,
                 generation_config=generation_config,
                 mime_type=mime_type
             )
             
-            response_text = llm_response['response_text']
-            response_metadata = llm_response['metadata']
+            response_text = response_data.get('response_text', '')
+            metadata = response_data.get('metadata', {})
             
             # Compute metrics (skip batch metrics here, they'll be computed later)
             metric_scores = {}
@@ -328,7 +343,7 @@ class ExperimentRunner:
                     try:
                         scores = metric.compute(
                             response=response_text,
-                            metadata=response_metadata,
+                            metadata=metadata,
                         )
                         metric_scores.update(scores)
                     except Exception as e:
@@ -341,10 +356,10 @@ class ExperimentRunner:
                 'use_case': experiment['use_case'],
                 'audio_file': audio_file,
                 'response_text': response_text,
-                'metadata': response_metadata,  # Store metadata for batch evaluation
-                'input_tokens': response_metadata['input_tokens'],
-                'output_tokens': response_metadata['output_tokens'],
-                'total_tokens': response_metadata['total_tokens'],
+                'metadata': metadata,  # Store metadata for batch evaluation
+                'input_tokens': metadata['input_tokens'],
+                'output_tokens': metadata['output_tokens'],
+                'total_tokens': metadata['total_tokens'],
                 'processing_time': time.time() - start_time,
                 'timestamp': datetime.now().isoformat(),
                 **metric_scores

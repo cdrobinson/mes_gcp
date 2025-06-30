@@ -23,7 +23,9 @@ gcs_files:
 experiments:
   - name: "transcription_baseline"
     use_case: "transcription"
-    model_id: "gemini-1.5-pro"
+    client:
+      name: "gemini"
+      model_id: "gemini-1.5-pro"
     generation_config:
       temperature: 0.2
       top_k: 40
@@ -39,7 +41,9 @@ experiments:
   
   - name: "transcription_flash"
     use_case: "transcription"
-    model_id: "gemini-1.5-flash"
+    client:
+      name: "gemini"
+      model_id: "gemini-1.5-flash"
     generation_config:
       temperature: 0.1
       top_k: 32
