@@ -174,17 +174,17 @@ class VertexAIEvaluationMetric(BaseMetric):
         try:
             eval_task = EvalTask(
                 dataset=eval_data,
-                metrics=[self.hallucination_metric, self.bias_metric],
-                experiment="batch_response_evaluation"
+                metrics=[self.bias_metric],
+                experiment="batch-response-evaluation"
             )
             
             eval_result = eval_task.evaluate()
-            MetricPromptTemplateExamples.Pointwise.GROUNDEDNESS
+
             scores = {}
             
             # Get row-level results
-            if hasattr(eval_result, 'results_df'):
-                results_df = eval_result.results_df
+            if hasattr(eval_result, 'metrics_table'):
+                results_df = eval_result.metrics_table
                 
                 if 'hallucination_rate' in results_df.columns:
                     scores['vertexai_hallucination_rate'] = results_df['hallucination_rate'].tolist()

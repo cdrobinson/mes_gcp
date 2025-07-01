@@ -352,7 +352,7 @@ class ExperimentRunner:
             
             result = {
                 'experiment_name': experiment['name'],
-                'model_id': experiment['model_id'],
+                'model_id': experiment['client']['model_id'],
                 'use_case': experiment['use_case'],
                 'audio_file': audio_file,
                 'response_text': response_text,
