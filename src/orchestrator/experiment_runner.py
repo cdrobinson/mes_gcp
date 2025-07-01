@@ -26,7 +26,7 @@ class ExperimentRunner:
     def __init__(self, config_path: str):
         """
         Initialise the experiment runner
-        
+
         Args:
             config_path: Path to the YAML configuration file
         """
@@ -66,6 +66,15 @@ class ExperimentRunner:
         logger.info(f"ExperimentRunner initialised with {len(self.available_metrics)} available metrics")
 
     def _init_llm_client(self, client_config: Dict[str, Any]) -> BaseLLMClient:
+        """
+        Initialise an LLM client based on the provided configuration.
+
+        Args:
+            client_config: Dictionary containing client configuration.
+
+        Returns:
+            An instance of BaseLLMClient.
+        """
         client_name = client_config.get('name', 'gemini')
         model_id = client_config.get('model_id')
         if not model_id:
@@ -79,6 +88,12 @@ class ExperimentRunner:
         raise ValueError(f"Unknown LLM client: {client_name}")
 
     def _load_config(self) -> Dict[str, Any]:
+        """
+        Load the experiment configuration from a YAML file.
+
+        Returns:
+            Dictionary containing the loaded configuration.
+        """
         with open(self.config_path, 'r') as f:
             config = yaml.safe_load(f)
         required_keys = ['project', 'location', 'bucket', 'experiments', 'reference_generation']
@@ -89,9 +104,24 @@ class ExperimentRunner:
         return config
     
     def _init_gcs_client(self) -> GCSClient:
+        """
+        Initialise the GCS client using the configured bucket.
+
+        Returns:
+            An instance of GCSClient.
+        """
         return GCSClient(bucket_name=self.config['bucket'])
 
     def run_experiments(self, experiment_names: Optional[List[str]] = None) -> pd.DataFrame:
+        """
+        Run all or selected experiments as defined in the configuration.
+
+        Args:
+            experiment_names: Optional list of experiment names to run.
+
+        Returns:
+            DataFrame containing the results of the experiments.
+        """
         experiments_to_run = self.config['experiments']
         if experiment_names:
             experiments_to_run = [exp for exp in experiments_to_run if exp['name'] in experiment_names]
@@ -116,6 +146,13 @@ class ExperimentRunner:
         return results_df
 
     def _run_single_experiment(self, experiment: Dict[str, Any], audio_files: List[str]):
+        """
+        Run a single experiment on a list of audio files.
+
+        Args:
+            experiment: Dictionary containing experiment configuration.
+            audio_files: List of audio file URIs to process.
+        """
         logger.info(f"Starting experiment: {experiment['name']}")
         llm_client = self._init_llm_client(experiment['client'])
         prompt = self.prompt_manager.load(experiment['prompt_id'])
@@ -142,7 +179,19 @@ class ExperimentRunner:
                               metrics: List[BaseMetric],
                               audio_file: str,
                               prompt: str) -> Optional[Dict[str, Any]]:
-        """Generates a response, reference, and computes individual metrics for a single audio file."""
+        """
+        Generates a response, reference, and computes individual metrics for a single audio file.
+
+        Args:
+            experiment: Dictionary containing experiment configuration.
+            llm_client: The LLM client to use for generation.
+            metrics: List of metric instances to compute.
+            audio_file: URI of the audio file to process.
+            prompt: Prompt string to use for generation.
+
+        Returns:
+            Dictionary with results for the audio file, or None if processing failed.
+        """
         start_time = time.time()
         try:
             _, path = self.gcs_client.parse_gcs_uri(audio_file)
@@ -203,7 +252,15 @@ class ExperimentRunner:
             return None
 
     def _run_batch_evaluations(self, results_df: pd.DataFrame) -> pd.DataFrame:
-        """Runs all applicable batch-supporting metrics on the results."""
+        """
+        Runs all applicable batch-supporting metrics on the results.
+
+        Args:
+            results_df: DataFrame containing experiment results.
+
+        Returns:
+            DataFrame with batch metric results added.
+        """
         if results_df.empty:
             return results_df
         
@@ -225,7 +282,15 @@ class ExperimentRunner:
         return results_df
 
     def _get_experiment_metrics(self, experiment: Dict[str, Any]) -> List[BaseMetric]:
-        """Gets the metric instances for a specific experiment based on config."""
+        """
+        Gets the metric instances for a specific experiment based on config.
+
+        Args:
+            experiment: Dictionary containing experiment configuration.
+
+        Returns:
+            List of metric instances to run for the experiment.
+        """
         metric_names = experiment.get('metrics', [])
         metrics_to_run = []
         
@@ -243,10 +308,10 @@ class ExperimentRunner:
 
     def _write_results_to_bigquery(self, results_df: pd.DataFrame) -> None:
         """
-        Write experiment results to BigQuery
-        
+        Write experiment results to BigQuery.
+
         Args:
-            results_df: DataFrame containing experiment results
+            results_df: DataFrame containing experiment results.
         """
         try:
             bigquery_config = self.config.get('bigquery', {})
@@ -285,7 +350,12 @@ class ExperimentRunner:
             raise
 
     def _get_audio_files(self) -> List[str]:
-        """Get list of audio files from GCS"""
+        """
+        Get list of audio files from GCS.
+
+        Returns:
+            List of valid audio file URIs.
+        """
         try:
             patterns = self.config.get('gcs_files', [])
             audio_files = self.gcs_client.list_audio_files(patterns)
@@ -308,7 +378,15 @@ class ExperimentRunner:
             return []
     
     def _get_mime_type_from_path(self, path: str) -> str:
-        """Get MIME type from file path"""
+        """
+        Get MIME type from file path.
+
+        Args:
+            path: File path string.
+
+        Returns:
+            MIME type string.
+        """
         extension = path.lower().split('.')[-1]
         mime_types = {
             'wav': 'audio/wav',
@@ -318,7 +396,12 @@ class ExperimentRunner:
         return mime_types.get(extension, 'audio/wav')
 
     def get_experiment_summary(self) -> Dict[str, Any]:
-        """Get a summary of the current experiment run"""
+        """
+        Get a summary of the current experiment run.
+
+        Returns:
+            Dictionary containing summary statistics for the run.
+        """
         if not self.results:
             return {"message": "No results available"}
         
