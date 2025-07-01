@@ -21,8 +21,8 @@ gcs_files:
   - "calls/followup_*.wav"
 
 experiments:
-  - name: "transcription_baseline"
-    use_case: "transcription"
+  - name: "summarisation_baseline"
+    use_case: "summarisation"
     client:
       name: "gemini"
       model_id: "gemini-1.5-pro"
@@ -30,32 +30,38 @@ experiments:
       temperature: 0.2
       top_k: 40
       top_p: 0.8
-      max_output_tokens: 4096
-      response_logprobs: true
-      logprobs: 1
-    prompt_id: "prompt-v1"
+      max_output_tokens: 1024
+    prompt_id: "summarisation-prompt-v1"
     metrics:
-      - "transcript_quality"
-      - "safety"
-      - "vertexai_evaluation"
-  
-  - name: "transcription_flash"
-    use_case: "transcription"
+      - "vertexai_groundedness"
+      - "vertexai_fluency"
+      - "vertexai_summarization_quality"
+    
+  - name: "summarisation_flash"
+    use_case: "summarisation"
     client:
       name: "gemini"
       model_id: "gemini-1.5-flash"
     generation_config:
-      temperature: 0.1
-      top_k: 32
-      top_p: 0.9
-      max_output_tokens: 4096
-      response_logprobs: true
-      logprobs: 1
-    prompt_id: "prompt-v1"
+      temperature: 0.2
+      top_k: 40
+      top_p: 0.8
+      max_output_tokens: 1024
+    prompt_id: "summarisation-prompt-v1"
     metrics:
-      - "transcript_quality"
-      - "safety"
-      - "vertexai_evaluation"
+      - "vertexai_groundedness"
+      - "vertexai_fluency"
+      - "vertexai_summarization_quality"
+
+reference_config:
+  client:
+    model_id: "gemini-1.5-pro"
+  prompt_id: "transcription-prompt-v1"
+  generation_config:
+    temperature: 0.2
+    top_k: 40
+    top_p: 0.8
+    max_output_tokens: 1024
 
 concurrency:
   max_workers: 4

@@ -54,11 +54,22 @@ This document describes the available evaluation metrics in the Model Evaluation
 - **Coherence:** Logical flow and consistency of the response
 - **Groundedness:** Factual accuracy and adherence to source material
 
+**Available Pointwise Metrics:**
+- `vertexai_fluency`: Assesses the language quality and readability of the response.
+- `vertexai_coherence`: Measures the logical flow and consistency of the response.
+- `vertexai_safety`: Evaluates the safety of the response content.
+- `vertexai_groundedness`: Checks if the response is factually accurate and supported by the provided context.
+- `vertexai_instruction_following`: Assesses how well the model follows the instructions in the prompt.
+- `vertexai_verbosity`: Measures the conciseness of the response.
+- `vertexai_text_quality`: A general measure of the overall quality of the text.
+- `vertexai_summarization_quality`: Specifically evaluates the quality of summaries.
+- `vertexai_question_answering_quality`: Assesses the quality of answers to questions.
+- `vertexai_multi_turn_chat_quality`: Measures the quality of multi-turn chat interactions.
+- `vertexai_multi_turn_safety`: Evaluates the safety of multi-turn chat interactions.
+
 **Output Metrics:**
-- `vertexai_quality_score` - Overall quality assessment
-- `vertexai_relevance_score` - Response relevance score
-- `vertexai_coherence_score` - Logical consistency score
-- `vertexai_groundedness_score` - Factual accuracy score
+- The output will contain a column for each of the configured pointwise metrics (e.g., `vertexai_fluency_score`, `vertexai_groundedness_score`).
+- Each metric will have a corresponding `_explanation` column with the rationale from the evaluator.
 
 **Special Features:**
 - Supports batch evaluation for improved efficiency

@@ -3,7 +3,7 @@
 import logging
 import time
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import yaml
@@ -56,7 +56,8 @@ class ExperimentRunner:
             ),
             "vertexai_evaluation": VertexAIEvaluationMetric(
                 project_id=project_id,
-                location=location
+                location=location,
+                bucket_name=self.config['bucket']
             )
         }
         
@@ -155,7 +156,7 @@ class ExperimentRunner:
         results_df = pd.DataFrame(self.results)
         
         # Run batch evaluation for metrics that support it
-        results_df = self._run_batch_evaluations(results_df, experiment_metrics)
+        results_df = self._run_batch_evaluations(results_df)
         
         if self.config.get('write_to_bigquery', False) and self.bigquery_client:
             self._write_results_to_bigquery(results_df)
@@ -377,7 +378,7 @@ class ExperimentRunner:
                 'timestamp': datetime.now().isoformat()
             }
 
-    def _run_batch_evaluations(self, results_df: pd.DataFrame, experiment_metrics) -> pd.DataFrame:
+    def _run_batch_evaluations(self, results_df: pd.DataFrame) -> pd.DataFrame:
         """
         Run batch evaluations for metrics that support it
         
@@ -391,31 +392,104 @@ class ExperimentRunner:
             return results_df
         
         logger.info("Running batch evaluations for supported metrics")
-        
-        # Identify metrics that support batch evaluation
-        batch_metrics = {}
-        individual_metrics = {}
-        
-        for metric_name, metric in self.available_metrics.items():
-            if metric_name not in experiment_metrics:
+        all_results = []
+
+        for experiment_name, group in results_df.groupby('experiment_name'):
+            experiment_config = self._get_experiment_config(experiment_name)
+            if not experiment_config:
+                all_results.append(group)
                 continue
+                
+            group = self._apply_batch_metrics(group, experiment_config)
+            all_results.append(group)
+
+        return pd.concat(all_results) if all_results else pd.DataFrame()
+
+    def _get_experiment_config(self, experiment_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get experiment configuration by name
+        
+        Args:
+            experiment_name: Name of the experiment
+            
+        Returns:
+            Experiment configuration dictionary or None if not found
+        """
+        experiment_config = next(
+            (exp for exp in self.config['experiments'] if exp['name'] == experiment_name), 
+            None
+        )
+        if not experiment_config:
+            logger.warning(f"Could not find config for experiment {experiment_name}, skipping batch evaluations.")
+        return experiment_config
+
+    def _apply_batch_metrics(self, group: pd.DataFrame, experiment_config: Dict[str, Any]) -> pd.DataFrame:
+        """
+        Apply all batch metrics to a group of results from a single experiment
+        
+        Args:
+            group: DataFrame containing results for a single experiment
+            experiment_config: Configuration for the experiment
+            
+        Returns:
+            DataFrame with batch metric results added
+        """
+        logger.info(f"Running batch evaluations for experiment: {experiment_config['name']}")
+        
+        batch_metrics = self._get_batch_metrics_for_experiment(experiment_config)
+        
+        for metric_name, metric in batch_metrics:
+            group = self._apply_metric_safely(metric_name, metric, group, experiment_config)
+            
+        return group
+
+    def _get_batch_metrics_for_experiment(self, experiment_config: Dict[str, Any]) -> List[Tuple[str, BaseMetric]]:
+        """
+        Get list of batch metrics that should be applied to an experiment
+        
+        Args:
+            experiment_config: Configuration for the experiment
+            
+        Returns:
+            List of (metric_name, metric_instance) tuples for batch metrics
+        """
+        experiment_metrics = experiment_config.get('metrics', [])
+        batch_metrics = []
+        
+        for metric_name in experiment_metrics:
+            if metric_name not in self.available_metrics:
+                continue
+                
+            metric = self.available_metrics[metric_name]
             if hasattr(metric, 'supports_batch_evaluation') and metric.supports_batch_evaluation():
-                batch_metrics[metric_name] = metric
-            else:
-                individual_metrics[metric_name] = metric
+                batch_metrics.append((metric_name, metric))
         
-        logger.info(f"Found {len(batch_metrics)} batch metrics and {len(individual_metrics)} individual metrics")
+        return batch_metrics
+
+    def _apply_metric_safely(self, metric_name: str, metric: BaseMetric, group: pd.DataFrame, experiment_config: Dict[str, Any]) -> pd.DataFrame:
+        """
+        Apply a single batch metric with error handling
         
-        for metric_name, metric in batch_metrics.items():
-            try:
-                logger.info(f"Running batch evaluation for: {metric_name}")
-                results_df = metric.batch_compute(results_df)
-            except Exception as e:
-                logger.error(f"Error in batch evaluation for {metric_name}: {e}")
-                # Add error column
-                results_df[f"{metric_name}_batch_error"] = 1.0
-        
-        return results_df
+        Args:
+            metric_name: Name of the metric
+            metric: The metric instance
+            group: DataFrame containing results for a single experiment
+            experiment_config: Configuration for the experiment
+            
+        Returns:
+            DataFrame with metric results added or error columns if failed
+        """
+        try:
+            logger.info(f"Running batch evaluation for: {metric_name}")
+            
+            # Use the new standardized interface for all metrics
+            return metric.batch_compute(group, experiment_config, self.config)
+                
+        except Exception as e:
+            logger.error(f"Error in batch evaluation for {metric_name}: {e}")
+            error_col = f"{metric_name}_batch_error"
+            group[error_col] = 1.0
+            return group
 
     def get_experiment_summary(self) -> Dict[str, Any]:
         """Get a summary of the current experiment run"""

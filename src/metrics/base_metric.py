@@ -52,9 +52,34 @@ class BaseMetric(ABC):
         """Check if this metric supports batch evaluation"""
         return False
     
-    def batch_compute(self, results_df: pd.DataFrame) -> pd.DataFrame:
+    def batch_compute(self, results_df: pd.DataFrame, experiment_config: Optional[Dict[str, Any]] = None, global_config: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
         """
-        Compute metrics for a batch of responses (default implementation)
+        Compute metrics for a batch of responses
+        
+        Args:
+            results_df: DataFrame containing experiment results
+            experiment_config: Configuration for the specific experiment (optional for backward compatibility)
+            global_config: Global configuration (optional for backward compatibility)
+            
+        Returns:
+            DataFrame with additional metric columns
+        """
+        # Handle backward compatibility - if old signature is used, call it
+        if experiment_config is None and global_config is None:
+            # Legacy call - use old implementation
+            return self._legacy_batch_compute(results_df)
+        
+        # New standardized interface - default implementation falls back to individual compute calls
+        if not self.supports_batch_evaluation():
+            import warnings
+            warnings.warn(f"Metric {self.name} does not support batch evaluation, falling back to individual calls")
+            return self._legacy_batch_compute(results_df)
+        else:
+            raise NotImplementedError("Batch evaluation not implemented for this metric")
+    
+    def _legacy_batch_compute(self, results_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Legacy batch compute implementation for backward compatibility
         
         Args:
             results_df: DataFrame containing experiment results
