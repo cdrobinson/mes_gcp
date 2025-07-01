@@ -24,9 +24,7 @@ METRIC_TEMPLATE_MAPPING = {
     "vertexai_verbosity": MetricPromptTemplateExamples.Pointwise.VERBOSITY,
     "vertexai_text_quality": MetricPromptTemplateExamples.Pointwise.TEXT_QUALITY,
     "vertexai_summarization_quality": MetricPromptTemplateExamples.Pointwise.SUMMARIZATION_QUALITY,
-    "vertexai_question_answering_quality": MetricPromptTemplateExamples.Pointwise.QUESTION_ANSWERING_QUALITY,
-    "vertexai_multi_turn_chat_quality": MetricPromptTemplateExamples.Pointwise.MULTI_TURN_CHAT_QUALITY,
-    "vertexai_multi_turn_safety": MetricPromptTemplateExamples.Pointwise.MULTI_TURN_SAFETY,
+    "vertexai_question_answering_quality": MetricPromptTemplateExamples.Pointwise.QUESTION_ANSWERING_QUALITY
 }
 
 

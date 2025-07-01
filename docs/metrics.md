@@ -64,8 +64,6 @@ This document describes the available evaluation metrics in the Model Evaluation
 - `vertexai_text_quality`: A general measure of the overall quality of the text.
 - `vertexai_summarization_quality`: Specifically evaluates the quality of summaries.
 - `vertexai_question_answering_quality`: Assesses the quality of answers to questions.
-- `vertexai_multi_turn_chat_quality`: Measures the quality of multi-turn chat interactions.
-- `vertexai_multi_turn_safety`: Evaluates the safety of multi-turn chat interactions.
 
 **Output Metrics:**
 - The output will contain a column for each of the configured pointwise metrics (e.g., `vertexai_fluency_score`, `vertexai_groundedness_score`).
