@@ -114,7 +114,6 @@ class GeminiClient(BaseLLMClient, RetryableClient):
         Returns:
             Dictionary containing the response and metadata
         """
-        start_time = time.time()
         try:
             gen_config = types.GenerateContentConfig(
                 temperature=generation_config.get("temperature", 0.2),
@@ -124,6 +123,9 @@ class GeminiClient(BaseLLMClient, RetryableClient):
             )
 
             content = [prompt]
+
+            start_time = time.time()
+            
             response = self.client.models.generate_content(
                 model=self.model_id,
                 contents=content,

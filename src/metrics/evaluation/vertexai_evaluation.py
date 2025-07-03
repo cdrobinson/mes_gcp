@@ -4,7 +4,7 @@ import logging
 import pandas as pd
 
 import vertexai
-from vertexai.evaluation import EvalTask, PointwiseMetric, constants
+from vertexai.evaluation import EvalTask, PointwiseMetric, constants, MetricPromptTemplateExamples
 
 from metrics.base_metric import BaseMetric
 
@@ -12,15 +12,15 @@ logger = logging.getLogger(__name__)
 
 # Mapping from the metric name in the config to the SDK's PointwiseMetric object
 POINTWISE_METRIC_MAP = {
-    "FLUENCY": PointwiseMetric(metric=constants.Metric.FLUENCY),
-    "COHERENCE": PointwiseMetric(metric=constants.Metric.COHERENCE),
-    "SAFETY": PointwiseMetric(metric=constants.Metric.SAFETY),
-    "GROUNDEDNESS": PointwiseMetric(metric=constants.Metric.GROUNDEDNESS),
-    "INSTRUCTION_FOLLOWING": PointwiseMetric(metric=constants.Metric.INSTRUCTION_FOLLOWING),
-    "VERBOSITY": PointwiseMetric(metric=constants.Metric.VERBOSITY),
-    "TEXT_QUALITY": PointwiseMetric(metric=constants.Metric.TEXT_QUALITY),
-    "SUMMARIZATION_QUALITY": PointwiseMetric(metric=constants.Metric.SUMMARIZATION_QUALITY),
-    "QUESTION_ANSWERING_QUALITY": PointwiseMetric(metric=constants.Metric.QUESTION_ANSWERING_QUALITY),
+    "FLUENCY": MetricPromptTemplateExamples.Pointwise.FLUENCY,
+    "COHERENCE": MetricPromptTemplateExamples.Pointwise.COHERENCE,
+    "SAFETY": MetricPromptTemplateExamples.Pointwise.SAFETY,
+    "GROUNDEDNESS": MetricPromptTemplateExamples.Pointwise.GROUNDEDNESS,
+    "INSTRUCTION_FOLLOWING": MetricPromptTemplateExamples.Pointwise.INSTRUCTION_FOLLOWING,
+    "VERBOSITY": MetricPromptTemplateExamples.Pointwise.VERBOSITY,
+    "TEXT_QUALITY": MetricPromptTemplateExamples.Pointwise.TEXT_QUALITY,
+    "SUMMARIZATION_QUALITY": MetricPromptTemplateExamples.Pointwise.SUMMARIZATION_QUALITY,
+    "QUESTION_ANSWERING_QUALITY": MetricPromptTemplateExamples.Pointwise.QUESTION_ANSWERING_QUALITY,
 }
 
 
@@ -36,6 +36,32 @@ class VertexAIEvaluationMetric(BaseMetric):
 
     def supports_batch_evaluation(self) -> bool:
         return True
+
+    def _prepare_eval_dataset(self, group: pd.DataFrame, metrics_for_exp) -> pd.DataFrame:
+        """
+        Prepare the eval dataset for VertexAI evaluation.
+        If GROUNDEDNESS or SUMMARIZATION_QUALITY is in the metrics, append reference to prompt.
+        Only keep 'response' and 'prompt' columns.
+        """
+        needs_reference = any(
+            name.replace('vertexai_', '').upper() in ("GROUNDEDNESS", "SUMMARIZATION_QUALITY")
+            for name in metrics_for_exp
+        )
+        required_cols = ['response', 'prompt']
+        if needs_reference:
+            required_cols.append('reference')
+
+        eval_dataset = group.dropna(subset=required_cols).copy()
+
+        if needs_reference and not eval_dataset.empty:
+            eval_dataset['prompt'] = (
+                eval_dataset['prompt'].astype(str) +
+                "\n\nContext: " +
+                eval_dataset['reference'].astype(str)
+            )
+
+        eval_dataset = eval_dataset[['response', 'prompt']]
+        return eval_dataset
 
     def batch_compute(self, results_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -63,18 +89,14 @@ class VertexAIEvaluationMetric(BaseMetric):
                 logger.info(f"No applicable Vertex AI metrics for '{experiment_name}'. Skipping.")
                 continue
 
-            required_cols = ['response', 'prompt']
-            if any(m.metric == constants.Metric.GROUNDEDNESS for m in metrics_to_run):
-                required_cols.append('reference')
-
-            eval_dataset = group.dropna(subset=required_cols).copy()
+            eval_dataset = self._prepare_eval_dataset(group, metrics_for_exp)
 
             if eval_dataset.empty:
                 logger.warning(f"No valid rows with required columns for Vertex AI evaluation in '{experiment_name}'.")
                 continue
 
             try:
-                eval_task = EvalTask(dataset=eval_dataset, metrics=metrics_to_run)
+                eval_task = EvalTask(dataset=eval_dataset, metrics=metrics_to_run, experiment="MES-experiment")
                 eval_result = eval_task.evaluate()
                 
                 metric_results_table = eval_result.metrics_table

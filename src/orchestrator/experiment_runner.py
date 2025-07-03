@@ -192,7 +192,6 @@ class ExperimentRunner:
         Returns:
             Dictionary with results for the audio file, or None if processing failed.
         """
-        start_time = time.time()
         try:
             _, path = self.gcs_client.parse_gcs_uri(audio_file)
             audio_data = self.gcs_client.download_bytes(path)
@@ -211,7 +210,6 @@ class ExperimentRunner:
                 reference_text = transcript_response.get('response_text')
                 if not reference_text:
                     logger.warning(f"Failed to generate reference transcript for {audio_file}.")
-
             response_data = llm_client.generate_from_audio(
                 audio_data=audio_data, prompt=prompt,
                 generation_config=generation_config, mime_type=mime_type
@@ -243,7 +241,7 @@ class ExperimentRunner:
                 'input_tokens': metadata.get('input_tokens'),
                 'output_tokens': metadata.get('output_tokens'),
                 'total_tokens': metadata.get('total_tokens'),
-                'processing_time': time.time() - start_time,
+                'processing_time': metadata.get('latency_seconds', 0.0),
                 'timestamp': datetime.now().isoformat(),
                 **metric_scores
             }
@@ -267,7 +265,7 @@ class ExperimentRunner:
         logger.info("Running batch evaluations for supported metrics...")
         
         all_exp_metrics = set(m for exp_metrics in results_df['experiment_metrics'] for m in exp_metrics)
-        needs_vertex_eval = any(m in POINTWISE_METRIC_MAP for m in all_exp_metrics)
+        needs_vertex_eval = any(m.replace('vertexai_', '').upper() in POINTWISE_METRIC_MAP for m in all_exp_metrics)
 
         if needs_vertex_eval:
             vertex_eval_metric = self.available_metrics.get("vertexai_evaluation")
