@@ -1,7 +1,6 @@
 """Experiment orchestrator for LLM evaluations"""
 
 import logging
-import time
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from concurrent.futures import ThreadPoolExecutor
@@ -63,6 +62,7 @@ class ExperimentRunner:
         
         self.results = []
         self.run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.reference_cache = {}
         logger.info(f"ExperimentRunner initialised with {len(self.available_metrics)} available metrics")
 
     def _init_llm_client(self, client_config: Dict[str, Any]) -> BaseLLMClient:
@@ -201,15 +201,25 @@ class ExperimentRunner:
             reference_text = None
 
             if use_case in ['summarisation', 'call_analysis']:
-                ref_config = self.config['reference_generation']
-                ref_prompt = self.prompt_manager.load(ref_config['prompt_id'])
-                transcript_response = self.reference_client.generate_from_audio(
-                    audio_data=audio_data, prompt=ref_prompt,
-                    generation_config=ref_config.get('generation_config', {}), mime_type=mime_type
-                )
-                reference_text = transcript_response.get('response_text')
-                if not reference_text:
-                    logger.warning(f"Failed to generate reference transcript for {audio_file}.")
+                # Check cache first
+                if audio_file in self.reference_cache:
+                    reference_text = self.reference_cache[audio_file]
+                    logger.debug(f"Using cached reference transcript for {audio_file}")
+                else:
+                    ref_config = self.config['reference_generation']
+                    ref_prompt = self.prompt_manager.load(ref_config['prompt_id'])
+                    transcript_response = self.reference_client.generate_from_audio(
+                        audio_data=audio_data, prompt=ref_prompt,
+                        generation_config=ref_config.get('generation_config', {}), mime_type=mime_type
+                    )
+                    reference_text = transcript_response.get('response_text')
+                    if reference_text:
+                        # Cache the successful transcript
+                        self.reference_cache[audio_file] = reference_text
+                        logger.debug(f"Cached reference transcript for {audio_file}")
+                    else:
+                        logger.warning(f"Failed to generate reference transcript for {audio_file}.")
+            
             response_data = llm_client.generate_from_audio(
                 audio_data=audio_data, prompt=prompt,
                 generation_config=generation_config, mime_type=mime_type

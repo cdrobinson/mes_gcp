@@ -96,7 +96,7 @@ class VertexAIEvaluationMetric(BaseMetric):
                 continue
 
             try:
-                eval_task = EvalTask(dataset=eval_dataset, metrics=metrics_to_run, experiment="MES-experiment")
+                eval_task = EvalTask(dataset=eval_dataset, metrics=metrics_to_run, experiment="mes-experiment")
                 eval_result = eval_task.evaluate()
                 
                 metric_results_table = eval_result.metrics_table
