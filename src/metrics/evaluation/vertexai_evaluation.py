@@ -66,7 +66,7 @@ class VertexAIEvaluationMetric(BaseMetric):
     def batch_compute(self, results_df: pd.DataFrame) -> pd.DataFrame:
         """
         Computes LLM-as-a-judge metrics for a batch of responses.
-        It groups by experiment, as each experiment can have a different set of metrics.
+        Groups by experiment so that each experiment can request different metrics.
         """
         if 'experiment_metrics' not in results_df.columns:
             logger.warning("`experiment_metrics` column not found. Skipping Vertex AI Evaluation.")
@@ -76,47 +76,59 @@ class VertexAIEvaluationMetric(BaseMetric):
 
         for experiment_name, group in results_df.groupby('experiment_name'):
             logger.info(f"Running Vertex AI evaluation for experiment: {experiment_name}")
-            
+
             metrics_for_exp = group['experiment_metrics'].iloc[0]
-            
-            metrics_to_run = []
-            for name in metrics_for_exp:
-                map_key = name.replace('vertexai_', '').upper()
-                if map_key in POINTWISE_METRIC_MAP:
-                    metrics_to_run.append(POINTWISE_METRIC_MAP[map_key])
+
+            metrics_to_run = [
+                POINTWISE_METRIC_MAP[name.replace('vertexai_', '').upper()]
+                for name in metrics_for_exp
+                if name.replace('vertexai_', '').upper() in POINTWISE_METRIC_MAP
+            ]
 
             if not metrics_to_run:
                 logger.info(f"No applicable Vertex AI metrics for '{experiment_name}'. Skipping.")
                 continue
 
             eval_dataset = self._prepare_eval_dataset(group, metrics_for_exp)
-
             if eval_dataset.empty:
-                logger.warning(f"No valid rows with required columns for Vertex AI evaluation in '{experiment_name}'.")
+                logger.warning(
+                    f"No valid rows with required columns for Vertex AI evaluation in '{experiment_name}'."
+                )
                 continue
 
             try:
-                eval_task = EvalTask(dataset=eval_dataset, metrics=metrics_to_run, experiment="mes-experiment")
+                eval_task = EvalTask(dataset=eval_dataset,
+                                       metrics=metrics_to_run,
+                                       experiment="mes-experiment")
                 eval_result = eval_task.evaluate()
-                
+
                 metric_results_table = eval_result.metrics_table
-                
-                eval_score_cols = [col for col in metric_results_table.columns if col not in eval_dataset.columns]
-                
-                rename_map = {col: f"vertexai_{col.lower().replace('/score', '').replace('_', '')}" for col in eval_score_cols}
+
+                eval_score_cols = [
+                    col for col in metric_results_table.columns
+                    if col not in eval_dataset.columns
+                ]
+
+                rename_map = {
+                    col: f"vertexai_{col.lower().replace('/score', '').replace('_', '')}"
+                    for col in eval_score_cols
+                }
                 metric_results_table.rename(columns=rename_map, inplace=True)
 
-                final_results_df = final_results_df.merge(
-                    metric_results_table[list(rename_map.values())],
-                    left_index=True,
-                    right_index=True,
-                    how='left'
-                )
+                for col in metric_results_table.columns:
+                    # Add the column if this is the first experiment that produced it
+                    if col not in final_results_df.columns:
+                        final_results_df[col] = pd.NA
+
+                    final_results_df.loc[group.index, col] = metric_results_table[col]
 
             except Exception as e:
-                logger.error(f"Error during Vertex AI batch evaluation for '{experiment_name}': {e}", exc_info=True)
-                final_results_df.loc[group.index, f'vertexai_eval_error'] = 1.0
-        
+                logger.error(
+                    f"Error during Vertex AI batch evaluation for '{experiment_name}': {e}",
+                    exc_info=True,
+                )
+                final_results_df.loc[group.index, 'vertexai_eval_error'] = 1.0
+
         return final_results_df
 
     def compute(self, response: str, metadata: dict, **kwargs) -> dict:
