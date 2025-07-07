@@ -234,7 +234,7 @@ class ExperimentRunner:
                 if not metric.supports_batch_evaluation():
                     if metric.is_applicable(use_case):
                         try:
-                            scores = metric.compute(response=response_text, metadata=metadata, reference=reference_text)
+                            scores = metric.compute(response=response_text, metadata=metadata)
                             metric_scores.update(scores)
                         except Exception as e:
                             logger.error(f"Error computing individual metric {metric.name} for {audio_file}: {e}", exc_info=True)

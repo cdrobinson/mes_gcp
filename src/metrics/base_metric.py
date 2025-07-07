@@ -23,8 +23,7 @@ class BaseMetric(ABC):
     def compute(self, 
                 response: str, 
                 metadata: Dict[str, Any], 
-                reference: Optional[str] = None,
-                audio_path: Optional[str] = None) -> Dict[str, float]:
+                reference: Optional[str] = None) -> Dict[str, float]:
         """
         Compute the metric for a given response
         
@@ -32,7 +31,6 @@ class BaseMetric(ABC):
             response: The LLM response text
             metadata: Response metadata including tokens, latency, etc.
             reference: Reference/ground truth text (if available)
-            audio_path: Path to the original audio file (if needed)
             
         Returns:
             Dictionary of metric name to score mappings
