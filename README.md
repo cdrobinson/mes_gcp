@@ -76,6 +76,7 @@ Register your metric in the `ExperimentRunner.__init__()` method to make it avai
 ### Available Metrics
 
 - **transcript_quality** - Evaluates transcription accuracy and format compliance
+- **summarisation_quality** - Evaluates structured summary quality and format compliance
 - **safety** - Content safety evaluation using GCP Model Armour
 - **vertexai_evaluation** - LLM-as-a-judge evaluations via Vertex AI
 

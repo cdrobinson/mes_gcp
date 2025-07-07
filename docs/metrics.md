@@ -23,7 +23,25 @@ This document describes the available evaluation metrics in the Model Evaluation
 - `transcript_format_compliance` - Overall format adherence score
 - `transcript_required_speakers` - Presence of required speaker roles
 
-### 2. Safety Metric (`safety`)
+### 2. Summarization Quality Metric (`summarisation_quality`)
+
+**Use Case:** `summarisation`  
+**Description:** Evaluates the quality and format compliance of structured insurance call summaries using native LLM metrics and format validation.
+
+**Measured Aspects:**
+- **Confidence Scores:** Uses log probabilities from the LLM response to assess confidence
+- **Format Compliance:** Validates structured summary format with proper sections and plain text
+- **Section Coverage:** Ensures relevant sections are included based on conversation content
+- **Section Length:** Validates 100-200 word requirement per section
+
+**Output Metrics:**
+- `summarization_avg_log_probability` - Average log probability from the model
+- `summarization_confidence` - Exponential of average log probability (confidence score)
+- `summarization_section_coverage` - Proportion of expected sections present
+- `summarization_section_length_compliance` - Adherence to 100-200 word section requirement
+- `summarization_format_compliance` - Plain text format compliance score
+
+### 3. Safety Metric (`safety`)
 
 **Use Case:** `all`  
 **Description:** Evaluates content safety using Google Cloud Platform's Model Armour service to detect harmful content, PII, and other safety concerns.
@@ -43,7 +61,7 @@ This document describes the available evaluation metrics in the Model Evaluation
 - `safety_pii_findings_count` - Number of PII findings
 - `safety_deidentify_flagged` - Whether de-identification is recommended
 
-### 3. Vertex AI Evaluation Metric (`vertexai_evaluation`)
+### 4. Vertex AI Evaluation Metric (`vertexai_evaluation`)
 
 **Use Case:** `all`  
 **Description:** Leverages Vertex AI's evaluation service for LLM-as-a-judge assessments using sophisticated evaluation criteria.

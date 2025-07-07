@@ -43,6 +43,16 @@ Added when `transcript_quality` metric is enabled:
 - **`transcript_format_compliance`** (float) - Overall format adherence score (0.0-1.0)
 - **`transcript_required_speakers`** (float) - Whether required speakers are present (0.0 or 1.0)
 
+### Summarisation Quality Metrics
+
+Added when `summarization_quality` metric is enabled:
+
+- **`summarisation_avg_log_probability`** (float) - Average log probability from model output
+- **`summarisation_confidence`** (float) - Confidence score derived from log probabilities (0.0-1.0)
+- **`summarisation_section_coverage`** (float) - Proportion of expected sections present (0.0-1.0)
+- **`summarisation_section_length_compliance`** (float) - Adherence to 100-200 word section requirement (0.0-1.0)
+- **`summarisation_format_compliance`** (float) - Plain text format compliance score (0.0-1.0)
+
 ### Safety Metrics
 
 Added when `safety` metric is enabled:
@@ -105,6 +115,12 @@ For each metric, additional error tracking fields may be present:
     'transcript_confidence': 0.87,
     'transcript_format_compliance': 0.95,
     'transcript_speaker_coverage': 1.0,
+    
+    # Summarization quality metrics (when use_case is 'summarization')
+    'summarization_confidence': 0.92,
+    'summarization_section_coverage': 0.78,
+    'summarization_format_compliance': 0.95,
+    'summarization_required_sections': 1.0,
     
     # Safety metrics  
     'safety_overall_flagged': 0.0,

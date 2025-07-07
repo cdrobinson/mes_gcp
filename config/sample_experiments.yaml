@@ -36,6 +36,7 @@ experiments:
       - "vertexai_groundedness"
       - "vertexai_fluency"
       - "vertexai_summarization_quality"
+      - "summarization_quality"
     
   - name: "summarisation_flash"
     use_case: "summarisation"
@@ -52,6 +53,18 @@ experiments:
       - "vertexai_groundedness"
       - "vertexai_fluency"
       - "vertexai_summarization_quality"
+      - "summarisation_quality"
+
+reference_generation:
+  client:
+    name: "gemini"
+    model_id: "gemini-1.5-pro"
+  prompt_id: "transcription-prompt-v1"
+  generation_config:
+    temperature: 0.2
+    top_k: 40
+    top_p: 0.8
+    max_output_tokens: 1024
 
 reference_config:
   client:

@@ -13,6 +13,7 @@ from clients.bigquery_client import BigQueryClient
 from utils.prompt_manager import PromptManager
 from metrics.base_metric import BaseMetric
 from metrics.transcription.transcript_quality import TranscriptQualityMetric
+from metrics.summarisation.summarisation_quality import SummarisationQualityMetric
 from metrics.safety.safety import SafetyMetric
 from metrics.evaluation.vertexai_evaluation import VertexAIEvaluationMetric, POINTWISE_METRIC_MAP
 
@@ -49,6 +50,7 @@ class ExperimentRunner:
         
         self.available_metrics = {
             "transcript_quality": TranscriptQualityMetric(),
+            "summarisation_quality": SummarisationQualityMetric(),
             "safety": SafetyMetric(
                 project_id=project_id,
                 location=location,
