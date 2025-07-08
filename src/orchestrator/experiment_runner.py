@@ -1,5 +1,6 @@
 """Experiment orchestrator for LLM evaluations"""
 
+import json
 import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
@@ -180,7 +181,7 @@ class ExperimentRunner:
             ]
             for future in futures:
                 try:
-                    result = future.result(timeout=300)
+                    result = future.result(timeout=600)
                     if result:
                         self.results.append(result)
                 except Exception as e:
@@ -334,47 +335,42 @@ class ExperimentRunner:
 
         return metrics_to_run
 
-    def _write_results_to_bigquery(self, results_df: pd.DataFrame) -> None:
+    def write_results_to_bigquery(self, results_df: pd.DataFrame) -> None:
         """
-        Write experiment results to BigQuery.
+        Upload experiment results to BigQuery.
+        Assumes the table was created with `create_experiment_results_table`.
+        """
+        bigquery_cfg = self.config.get("bigquery", {})
+        dataset_name = bigquery_cfg.get("dataset_name", "llm_experiments")
+        table_name   = bigquery_cfg.get("table_name",   "experiment_results")
 
-        Args:
-            results_df: DataFrame containing experiment results.
-        """
         try:
-            bigquery_config = self.config.get('bigquery', {})
-            dataset_name = bigquery_config.get('dataset_name', 'llm_experiments')
-            table_name = bigquery_config.get('table_name', 'experiment_results')
-            
-            logger.info(f"Writing {len(results_df)} results to BigQuery: {dataset_name}.{table_name}")
-            
-            # Ensure dataset exists
-            self.bigquery_client.create_dataset(dataset_name, exists_ok=True)
-            
-            # Prepare data for BigQuery
-            # Convert datetime columns to strings and handle complex data types
-            df_copy = results_df.copy()
-            
-            # Convert timestamp column if exists
-            if 'timestamp' in df_copy.columns:
-                df_copy['timestamp'] = pd.to_datetime(df_copy['timestamp'])
-            
-            # Convert metadata column to JSON string if it exists
-            if 'metadata' in df_copy.columns:
-                df_copy['metadata'] = df_copy['metadata'].astype(str)
-            
+            # 2️⃣ Prepare dataframe ---------------------------------------------
+            df = results_df.copy()
+
+            # BigQuery field names use "_" not "/"
+            df.columns = [c.replace("/", "_") for c in df.columns]
+
+            # Convert timestamp column to pandas datetime
+            if "timestamp" in df.columns:
+                df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
+
+            # Anything that might be a dict / list → JSON strings
+            for col in ("metadata", "experiment_metrics"):
+                if col in df.columns:
+                    df[col] = df[col].apply(lambda x: json.dumps(x) if isinstance(x, (dict, list)) else str(x))
+
             self.bigquery_client.insert_rows_from_dataframe(
                 dataset_name=dataset_name,
                 table_name=table_name,
-                df=df_copy,
-                ignore_unknown_values=True,
-                skip_invalid_rows=False
+                df=df,
+                ignore_unknown_values=False,   # safer
+                skip_invalid_rows=False,
             )
-            
-            logger.info(f"Successfully wrote {len(df_copy)} rows to BigQuery")
-            
-        except Exception as e:
-            logger.error(f"Error writing results to BigQuery: {e}")
+            logger.info("Successfully wrote %s rows to %s.%s", len(df), dataset_name, table_name)
+
+        except Exception as exc:
+            logger.exception("Failed to write results to BigQuery")
             raise
 
     def _get_audio_files(self) -> List[str]:
