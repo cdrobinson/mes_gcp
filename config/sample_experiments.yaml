@@ -4,6 +4,10 @@ bucket: "mes-audio-bucket"
 
 write_to_bigquery: true
 
+transcript_storage:
+  bucket: "mes-experiment-data"
+  folder: "transcripts"
+
 vertexai:
   project_id: "gcp-project-id"
   location: "europe-west2"

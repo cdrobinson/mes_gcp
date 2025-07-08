@@ -34,6 +34,7 @@ class ExperimentRunner:
         self.config = self._load_config()
         
         self.gcs_client = self._init_gcs_client()
+        self.transcript_gcs_client = self._init_transcript_gcs_client()
         
         vertexai_config = self.config.get('vertexai', {})
         project_id = vertexai_config.get('project_id', self.config['project'])
@@ -113,6 +114,16 @@ class ExperimentRunner:
             An instance of GCSClient.
         """
         return GCSClient(bucket_name=self.config['bucket'])
+
+    def _init_transcript_gcs_client(self) -> GCSClient:
+        """
+        Initialise the GCS client for transcript storage.
+
+        Returns:
+            An instance of GCSClient for the transcript storage bucket.
+        """
+        transcript_bucket = self.config.get('transcript_storage', {}).get('bucket', 'mes-experiment-data')
+        return GCSClient(bucket_name=transcript_bucket)
 
     def run_experiments(self, experiment_names: Optional[List[str]] = None) -> pd.DataFrame:
         """
@@ -203,24 +214,31 @@ class ExperimentRunner:
             reference_text = None
 
             if use_case in ['summarisation', 'call_analysis']:
-                # Check cache first
+                # Check memory cache first
                 if audio_file in self.reference_cache:
                     reference_text = self.reference_cache[audio_file]
                     logger.debug(f"Using cached reference transcript for {audio_file}")
                 else:
-                    ref_config = self.config['reference_generation']
-                    ref_prompt = self.prompt_manager.load(ref_config['prompt_id'])
-                    transcript_response = self.reference_client.generate_from_audio(
-                        audio_data=audio_data, prompt=ref_prompt,
-                        generation_config=ref_config.get('generation_config', {}), mime_type=mime_type
-                    )
-                    reference_text = transcript_response.get('response_text')
+                    # Check GCS transcript storage
+                    reference_text = self._get_transcript_from_storage(audio_file)
+                    
                     if reference_text:
-                        # Cache the successful transcript
                         self.reference_cache[audio_file] = reference_text
-                        logger.debug(f"Cached reference transcript for {audio_file}")
+                        logger.debug(f"Using stored transcript for {audio_file}")
                     else:
-                        logger.warning(f"Failed to generate reference transcript for {audio_file}.")
+                        ref_config = self.config['reference_generation']
+                        ref_prompt = self.prompt_manager.load(ref_config['prompt_id'])
+                        transcript_response = self.reference_client.generate_from_audio(
+                            audio_data=audio_data, prompt=ref_prompt,
+                            generation_config=ref_config.get('generation_config', {}), mime_type=mime_type
+                        )
+                        reference_text = transcript_response.get('response_text')
+                        if reference_text:
+                            self.reference_cache[audio_file] = reference_text
+                            self._store_transcript(audio_file, reference_text)
+                            logger.debug(f"Generated and stored new transcript for {audio_file}")
+                        else:
+                            logger.warning(f"Failed to generate reference transcript for {audio_file}.")
             
             response_data = llm_client.generate_from_audio(
                 audio_data=audio_data, prompt=prompt,
@@ -435,3 +453,66 @@ class ExperimentRunner:
                 summary[f"{metric_col}_avg"] = df[metric_col].mean()
         
         return summary
+
+    def _get_transcript_path(self, audio_file: str) -> str:
+        """
+        Generate the transcript file path for a given audio file.
+        
+        Args:
+            audio_file: URI of the audio file
+            
+        Returns:
+            Path to the transcript file in the transcript storage bucket
+        """
+        _, audio_path = self.gcs_client.parse_gcs_uri(audio_file)
+        audio_filename = audio_path.split('/')[-1]
+        base_name = audio_filename.rsplit('.', 1)[0]
+        
+        transcript_folder = self.config.get('transcript_storage', {}).get('folder', 'transcripts')
+        return f"{transcript_folder}/{base_name}.txt"
+
+    def _get_transcript_from_storage(self, audio_file: str) -> Optional[str]:
+        """
+        Retrieve transcript from GCS storage if it exists.
+        
+        Args:
+            audio_file: URI of the audio file
+            
+        Returns:
+            Transcript text if found, None otherwise
+        """
+        try:
+            transcript_path = self._get_transcript_path(audio_file)
+            transcript_bytes = self.transcript_gcs_client.download_bytes(transcript_path)
+            transcript_text = transcript_bytes.decode('utf-8')
+            logger.debug(f"Retrieved existing transcript for {audio_file} from {transcript_path}")
+            return transcript_text
+        except Exception as e:
+            logger.debug(f"No existing transcript found for {audio_file}: {e}")
+            return None
+
+    def _store_transcript(self, audio_file: str, transcript_text: str) -> None:
+        """
+        Store transcript to GCS storage.
+        
+        Args:
+            audio_file: URI of the audio file
+            transcript_text: The transcript text to store
+        """
+        try:
+            import tempfile
+            import os
+            
+            transcript_path = self._get_transcript_path(audio_file)
+            
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as tmp_file:
+                tmp_file.write(transcript_text)
+                tmp_file_path = tmp_file.name
+            
+            try:
+                self.transcript_gcs_client.upload_file(tmp_file_path, transcript_path)
+                logger.debug(f"Stored transcript for {audio_file} to {transcript_path}")
+            finally:
+                os.unlink(tmp_file_path)  
+        except Exception as e:
+            logger.error(f"Failed to store transcript for {audio_file}: {e}")
