@@ -345,17 +345,14 @@ class ExperimentRunner:
         table_name   = bigquery_cfg.get("table_name",   "experiment_results")
 
         try:
-            # 2️⃣ Prepare dataframe ---------------------------------------------
             df = results_df.copy()
 
-            # BigQuery field names use "_" not "/"
             df.columns = [c.replace("/", "_") for c in df.columns]
 
             # Convert timestamp column to pandas datetime
             if "timestamp" in df.columns:
                 df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
 
-            # Anything that might be a dict / list → JSON strings
             for col in ("metadata", "experiment_metrics"):
                 if col in df.columns:
                     df[col] = df[col].apply(lambda x: json.dumps(x) if isinstance(x, (dict, list)) else str(x))
