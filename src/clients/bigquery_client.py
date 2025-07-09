@@ -123,13 +123,15 @@ class BigQueryClient(RetryableClient):
         table_id = f"{self.project_id}.{dataset_name}.{table_name}"
 
         try:
+            table = self.client.get_table(table_id)
+
             errors = self.client.insert_rows_from_dataframe(
-                df,
-                table_id=table_id,
+                table=table,
+                dataframe=df,
                 ignore_unknown_values=ignore_unknown_values,
                 skip_invalid_rows=skip_invalid_rows
             )
-            if errors:
+            if any(errors):
                 logger.error(f"Error inserting DataFrame rows into {table_id}: {errors}")
                 raise RuntimeError(f"Insert errors: {errors}")
             logger.info(f"Inserted {len(df)} rows from DataFrame into {table_id}.")
