@@ -1,0 +1,74 @@
+project: "your-gcp-project-id"
+location: "europe-west2"
+bucket: "mes-audio-bucket"
+
+write_to_bigquery: false
+
+transcript_storage:
+  bucket: "mes-experiment-data"
+  folder: "transcripts"
+
+vertexai:
+  project_id: "your-gcp-project-id"
+  location: "europe-west2"
+
+bigquery:
+  enabled: false
+  project_id: "your-gcp-project-id"
+  location: "europe-west2"
+  dataset_name: "llm_experiments"
+  table_name: "experiment_results"
+
+gcs_files:
+  - "calls/demo_claim.wav"
+
+experiments:
+  - name: "summarisation_good_prompt"
+    use_case: "summarisation"
+    client:
+      name: "gemini"
+      model_id: "gemini-1.5-flash"
+    generation_config:
+      temperature: 0.2
+      max_output_tokens: 1024
+    prompt_id: "good-summary-prompt-placeholder"
+    metrics:
+      # Pre-Agent Metrics
+      - "vertexai_fluency"
+      - "vertexai_coherence"
+      - "vertexai_verbosity"
+      # Post-Agent Metrics
+      - "vertexai_groundedness"
+      - "vertexai_safety"
+      - "vertexai_summarization_quality"
+
+  - name: "summarisation_basic_prompt"
+    use_case: "summarisation"
+    client:
+      name: "gemini"
+      model_id: "gemini-1.5-flash"
+    generation_config:
+      temperature: 0.2
+      max_output_tokens: 1024
+    prompt_id: "basic-summary-prompt-placeholder"
+    metrics:
+      # Pre-Agent Metrics
+      - "vertexai_fluency"
+      - "vertexai_coherence"
+      - "vertexai_verbosity"
+      # Post-Agent Metrics
+      - "vertexai_groundedness"
+      - "vertexai_safety"
+      - "vertexai_summarization_quality"
+
+reference_generation:
+  client:
+    name: "gemini"
+    model_id: "gemini-1.5-pro"
+  prompt_id: "transcription-prompt-v1"
+  generation_config:
+    temperature: 0.2
+    max_output_tokens: 2048
+
+concurrency:
+  max_workers: 2
