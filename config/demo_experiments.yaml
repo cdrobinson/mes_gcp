@@ -1,8 +1,13 @@
 project: "your-gcp-project-id"
 location: "europe-west2"
+
+firestore:
+  project_id: "your-gcp-project-id"
+
 bucket: "mes-audio-bucket"
 
 write_to_bigquery: false
+
 
 transcript_storage:
   bucket: "mes-experiment-data"
@@ -19,8 +24,10 @@ bigquery:
   dataset_name: "llm_experiments"
   table_name: "experiment_results"
 
-gcs_files:
-  - "calls/demo_claim.wav"
+data_loader:
+  client: "gcs"
+  files:
+    - "calls/demo_claim.wav"
 
 experiments:
   - name: "summarisation_good_prompt"

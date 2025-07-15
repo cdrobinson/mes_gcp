@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import yaml
 
-from clients import GeminiClient, BaseLLMClient
+from clients import GeminiClient, BaseLLMClient, FirestoreClient
 from clients.gcs_client import GCSClient
 from clients.bigquery_client import BigQueryClient
 from utils.prompt_manager import PromptManager
@@ -35,6 +35,7 @@ class ExperimentRunner:
         self.config = self._load_config()
         
         self.gcs_client = self._init_gcs_client()
+        self.firestore_client = self._init_firestore_client()
         self.transcript_gcs_client = self._init_transcript_gcs_client()
         
         vertexai_config = self.config.get('vertexai', {})
@@ -68,6 +69,14 @@ class ExperimentRunner:
         self.run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.reference_cache = {}
         logger.info(f"ExperimentRunner initialised with {len(self.available_metrics)} available metrics")
+
+    def _init_firestore_client(self) -> Optional[FirestoreClient]:
+        """
+        Initialise the Firestore client if configured.
+        """
+        if 'firestore' in self.config:
+            return FirestoreClient(project_id=self.config['firestore']['project_id'])
+        return None
 
     def _init_llm_client(self, client_config: Dict[str, Any]) -> BaseLLMClient:
         """
@@ -141,11 +150,11 @@ class ExperimentRunner:
             experiments_to_run = [exp for exp in experiments_to_run if exp['name'] in experiment_names]
         
         logger.info(f"Running {len(experiments_to_run)} experiments")
-        audio_files = self._get_audio_files()
-        logger.info(f"Processing {len(audio_files)} audio files")
+        data_to_process = self._get_data_to_process()
+        logger.info(f"Processing {len(data_to_process)} items.")
         
         for experiment in experiments_to_run:
-            self._run_single_experiment(experiment, audio_files)
+            self._run_single_experiment(experiment, data_to_process)
         
         if not self.results:
             logger.warning("No results generated to process")
@@ -155,17 +164,60 @@ class ExperimentRunner:
         results_df = self._run_batch_evaluations(results_df)
         
         if self.config.get('write_to_bigquery', False) and self.bigquery_client:
-            self._write_results_to_bigquery(results_df)
+            self.write_results_to_bigquery(results_df)
         
         return results_df
 
-    def _run_single_experiment(self, experiment: Dict[str, Any], audio_files: List[str]):
+    def evaluate_response(self, experiment_name: str, response_data: Dict[str, Any]) -> pd.DataFrame:
+        """
+        Evaluate a single response against the configured metrics.
+        This is for the workflow where the response is pre-loaded.
+        """
+        experiment = next((exp for exp in self.config['experiments'] if exp['name'] == experiment_name), None)
+        if not experiment:
+            raise ValueError(f"Experiment '{experiment_name}' not found in config.")
+
+        metrics_to_run = self._get_experiment_metrics(experiment)
+        use_case = experiment['use_case']
+        metric_scores = {}
+        for metric in metrics_to_run:
+            if not metric.supports_batch_evaluation():
+                if metric.is_applicable(use_case):
+                    try:
+                        scores = metric.compute(response=response_data.get("response"), metadata={})
+                        metric_scores.update(scores)
+                    except Exception as e:
+                        logger.error(f"Error computing individual metric {metric.name}: {e}", exc_info=True)
+                        metric_scores[f"{metric.name}_error"] = 1.0
+        
+        result = {
+            'experiment_name': experiment['name'],
+            'model_id': response_data.get('model_id'),
+            'use_case': use_case,
+            'prompt_id': None,
+            'prompt': None,
+            'response': response_data.get("response"),
+            'reference': response_data.get("reference"),
+            'metadata': response_data.get("metadata", {}),
+            'experiment_metrics': experiment.get('metrics', []),
+            **metric_scores
+        }
+        self.results.append(result)
+        results_df = pd.DataFrame(self.results)
+        results_df = self._run_batch_evaluations(results_df)
+
+        if self.config.get('write_to_bigquery', False) and self.bigquery_client:
+            self.write_results_to_bigquery(results_df)
+
+        return results_df
+
+    def _run_single_experiment(self, experiment: Dict[str, Any], data_to_process: List[str]):
         """
         Run a single experiment on a list of audio files.
 
         Args:
             experiment: Dictionary containing experiment configuration.
-            audio_files: List of audio file URIs to process.
+            data_to_process: List of data identifiers (e.g. GCS URIs) to process.
         """
         logger.info(f"Starting experiment: {experiment['name']}")
         llm_client = self._init_llm_client(experiment['client'])
@@ -177,7 +229,7 @@ class ExperimentRunner:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [
                 executor.submit(self._process_single_audio, experiment, llm_client, metrics_to_run, audio_file, prompt)
-                for audio_file in audio_files
+                for audio_file in data_to_process
             ]
             for future in futures:
                 try:
@@ -374,7 +426,42 @@ class ExperimentRunner:
             logger.exception("Failed to write results to BigQuery")
             raise
 
-    def _get_audio_files(self) -> List[str]:
+    def _get_data_to_process(self) -> List[Any]:
+        """
+        Get list of data to process based on the data_loader config.
+        """
+        data_loader_config = self.config.get('data_loader')
+        if not data_loader_config:
+            raise ValueError("data_loader config not found.")
+
+        client_type = data_loader_config.get('client')
+        if client_type == 'gcs':
+            return self._get_gcs_files(data_loader_config)
+        elif client_type == 'firestore':
+            return self._get_firestore_documents(data_loader_config)
+        else:
+            raise ValueError(f"Unsupported data_loader client: {client_type}")
+
+    def _get_firestore_documents(self, data_loader_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Get documents from Firestore.
+        """
+        if not self.firestore_client:
+            raise ValueError("Firestore client not initialized. Check config.")
+        
+        collection = data_loader_config.get('collection')
+        document_ids = data_loader_config.get('document_ids')
+        query = data_loader_config.get('query')
+
+        if document_ids:
+            return [self.firestore_client.get_document(collection, doc_id) for doc_id in document_ids]
+        elif query:
+            return self.firestore_client.query_collection(collection, query)
+        else:
+            raise ValueError("Either 'document_ids' or 'query' must be specified for firestore data_loader.")
+
+
+    def _get_gcs_files(self, data_loader_config: Dict[str, Any]) -> List[str]:
         """
         Get list of audio files from GCS.
 
@@ -382,7 +469,7 @@ class ExperimentRunner:
             List of valid audio file URIs.
         """
         try:
-            patterns = self.config.get('gcs_files', [])
+            patterns = data_loader_config.get('files', [])
             audio_files = self.gcs_client.list_audio_files(patterns)
             
             # Validate audio files

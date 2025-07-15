@@ -1,6 +1,15 @@
 """Client modules for external services"""
 
+from .gcs_client import GCSClient
 from .gemini_client import GeminiClient
-from .base_client import BaseLLMClient
+from .vertexai_client import VertexAIClient
+from .firestore_client import FirestoreClient
 
-__all__ = ["GeminiClient", "BaseLLMClient"]
+__all__ = [
+    "BaseClient",
+    "BigQueryClient",
+    "GCSClient",
+    "GeminiClient",
+    "VertexAIClient",
+    "FirestoreClient",
+]
