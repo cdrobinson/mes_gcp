@@ -13,13 +13,21 @@ These fields are present in every experiment result regardless of the metrics us
 
 ### Input/Output Data
 - **`audio_file`** (string) - GCS URI of the processed audio file
+- **`prompt_id`** (string) - Identifier of the prompt template used from Vertex AI Prompt Management
+- **`prompt`** (string) - The actual prompt text content loaded from the prompt template
 - **`response_text`** (string) - The complete text response from the LLM
+- **`reference`** (string, optional) - Reference text for comparison (when applicable)
 - **`metadata`** (object) - Raw response metadata from the LLM service
 
 ### Token Usage
 - **`input_tokens`** (integer) - Number of input tokens consumed
 - **`output_tokens`** (integer) - Number of output tokens generated  
 - **`total_tokens`** (integer) - Total token count (input + output)
+
+### Generation Configuration
+- **`temperature`** (float) - Temperature setting used for generation (controls randomness)
+- **`top_k`** (integer) - Top-k setting used for generation (limits token selection)
+- **`top_p`** (float) - Top-p (nucleus sampling) setting used for generation
 
 ### Processing Information
 - **`processing_time`** (float) - Time taken to process this audio file (seconds)
@@ -104,10 +112,15 @@ For each metric, additional error tracking fields may be present:
     'model_id': 'gemini-1.5-pro',
     'use_case': 'transcription',
     'audio_file': 'gs://bucket/calls/claim_001.wav',
+    'prompt_id': 'transcription-prompt-v1',
+    'prompt': 'Please transcribe the following audio accurately...',
     'response_text': 'Call_Agent: How can I help you today?\nCustomer: I need to file a claim...',
     'input_tokens': 1250,
     'output_tokens': 890,
     'total_tokens': 2140,
+    'temperature': 0.2,
+    'top_k': 40,
+    'top_p': 0.8,
     'processing_time': 12.34,
     'timestamp': '2025-06-26T10:30:45',
     
@@ -153,4 +166,14 @@ experiment_summary = df.groupby('experiment_name').agg({
 # Find best performing model
 model_performance = df.groupby('model_id')[metric_columns].mean()
 best_model = model_performance.mean(axis=1).idxmax()
+
+# Compare different prompt versions
+prompt_comparison = df.groupby(['prompt_id', 'experiment_name'])[metric_columns].mean()
+
+# Analyze impact of generation config parameters
+config_analysis = df.groupby(['temperature', 'top_k', 'top_p'])[metric_columns].mean()
+
+# Find optimal temperature settings
+temp_performance = df.groupby('temperature')[metric_columns].mean()
+best_temp = temp_performance.mean(axis=1).idxmax()
 ```

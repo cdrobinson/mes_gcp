@@ -264,6 +264,7 @@ class ExperimentRunner:
                 'model_id': experiment['client']['model_id'],
                 'use_case': use_case,
                 'audio_file': audio_file,
+                'prompt_id': experiment['prompt_id'],
                 'prompt': prompt,
                 'response': response_text,
                 'reference': reference_text,
@@ -273,6 +274,9 @@ class ExperimentRunner:
                 'output_tokens': metadata.get('output_tokens'),
                 'total_tokens': metadata.get('total_tokens'),
                 'processing_time': metadata.get('latency_seconds', 0.0),
+                'temperature': generation_config.get('temperature'),
+                'top_k': generation_config.get('top_k'),
+                'top_p': generation_config.get('top_p'),
                 'timestamp': datetime.now().isoformat(),
                 **metric_scores
             }
