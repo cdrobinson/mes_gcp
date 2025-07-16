@@ -12,3 +12,11 @@ matplotlib==3.10.1
 seaborn==0.13.2
 requests
 google-auth>=2.38.0
+textstat==0.7.7
+
+rouge-score==0.1.2
+bert-score==0.3.13
+nltk==3.8.1
+torch
+transformers
+sentence-transformers

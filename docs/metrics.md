@@ -92,6 +92,34 @@ This document describes the available evaluation metrics in the Model Evaluation
 - Uses advanced LLM models for nuanced evaluation
 - Provides detailed scoring rationale
 
+### 5. Readability Metrics (`readability`)
+
+**Use Case:** `all`
+**Description:** Evaluates the readability of the generated text using a suite of standard metrics from the `textstat` library.
+
+**Output Metrics:**
+- `readability_flesch_kincaid`: Flesch-Kincaid Grade Level
+- `readability_flesch_reading_ease`: Flesch Reading Ease Score
+- `readability_gunning_fog`: Gunning Fog Index
+- `readability_smog_index`: SMOG Index
+- `readability_coleman_liau_index`: Coleman-Liau Index
+- `readability_ari`: Automated Readability Index
+
+### 6. ROUGE and BERTScore Metrics (`summarisation_rouge_bert`)
+
+**Use Case:** `summarisation`
+**Description:** Evaluates summarisation quality using ROUGE (Recall-Oriented Understudy for Gisting Evaluation) and BERTScore.
+
+**Measured Aspects:**
+- **ROUGE:** Measures overlap of n-grams between the generated summary and a reference summary.
+- **BERTScore:** Uses contextual embeddings from BERT to measure semantic similarity between the generated and reference summaries.
+
+**Output Metrics:**
+- `summarisation_rouge1_precision`, `summarisation_rouge1_recall`, `summarisation_rouge1_f1`
+- `summarisation_rouge2_precision`, `summarisation_rouge2_recall`, `summarisation_rouge2_f1`
+- `summarisation_rougeL_precision`, `summarisation_rougeL_recall`, `summarisation_rougeL_f1`
+- `summarisation_bert_precision`, `summarisation_bert_recall`, `summarisation_bert_f1`
+
 ## Metric Implementation
 
 ### Base Metric Class
