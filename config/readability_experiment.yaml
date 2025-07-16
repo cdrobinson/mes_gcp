@@ -1,0 +1,13 @@
+project: "gcp-project-id"
+location: "europe-west2"
+bucket: "mes-experiment-data"
+write_to_bigquery: false
+
+experiments:
+  - name: "readability_check"
+    use_case: "summarisation"
+    metrics:
+      - "readability"
+    client:
+      name: "gemini"
+      model_id: "gemini-1.5-pro"
